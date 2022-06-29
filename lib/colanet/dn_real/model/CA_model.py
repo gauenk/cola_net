@@ -94,6 +94,7 @@ class ContextualAttention_Enhance(nn.Module):
                                                       strides=[self.stride_1, self.stride_1],
                                                       rates=[1, 1],
                                                       padding='same')
+        print("patch_28.shape: ",patch_28.shape)
         patch_28 = patch_28.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_28 = patch_28.permute(0, 4, 1, 2, 3)
         patch_28_group = torch.split(patch_28, 1, dim=0)

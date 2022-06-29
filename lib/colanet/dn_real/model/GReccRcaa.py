@@ -9,7 +9,7 @@ class RR2(nn.Module):
     def __init__(self, args, conv=common.default_conv):
         super(RR2, self).__init__()
         n_resblocks = 16
-        n_feats = 64  
+        n_feats = 64
         kernel_size = 3
 
         rgb_mean = (0.4488, 0.4371, 0.4040)
