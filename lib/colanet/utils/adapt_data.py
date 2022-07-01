@@ -23,10 +23,6 @@ class ImagePairDataSet(data.Dataset):
         self.block_w = block_w
         self.blocks_in_image_h = (self.im_h - self.block_w) // stride + 1
         self.blocks_in_image_w = (self.im_w - self.block_w) // stride + 1
-        # print("ImagePairDataSet Info")
-        # print(self.images_a.shape)
-        # print(self.im_h,self.block_w)
-        # print(self.blocks_in_image_h)
         self.len = self.im_n * self.blocks_in_image_h * self.blocks_in_image_w
         self.ishift = ShiftImageValues()
 
@@ -66,7 +62,6 @@ class ImagePairDataSet(data.Dataset):
         sample_a = self.images_a[im, :,row:row + self.block_w, col:col + self.block_w]
         sample_b = self.images_b[im, :,row:row + self.block_w, col:col + self.block_w]
         sample_a,sample_b = self.augment(sample_a,sample_b)
-
         return sample_a,sample_b
 
     def __len__(self):

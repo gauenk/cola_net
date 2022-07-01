@@ -25,7 +25,7 @@ class MBblock(nn.Module):
         out = self.act2(out)
         out = self.c_point(out)
         return out + x
-    
+
 def default_conv(in_channels, out_channels, kernel_size,stride=1, bias=True):
     return nn.Conv2d(
         in_channels, out_channels, kernel_size,

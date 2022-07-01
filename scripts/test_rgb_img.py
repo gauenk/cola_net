@@ -70,11 +70,9 @@ def run_exp(cfg):
         name = data.te.groups[int(batch['index'][0])]
 
         # -- select color channel --
-        if cfg.color == "bw":
+        if cfg.bw is True:
             noisy = noisy[:,[0]].contiguous()
             clean = clean[:,[0]].contiguous()
-        else:
-            assert cfg.color == "rgb","must be rgb if not bw for now."
 
         # -- onto cuda --
         noisy,clean = noisy.to(cfg.device),clean.to(cfg.device)
@@ -112,19 +110,22 @@ def run_exp(cfg):
             deno = deno.detach()
 
         # -- save example --
-        out_dir = Path(cfg.saved_dir)# / str(cfg.uuid)
+        out_dir = Path(cfg.saved_dir) / get_dir_name(cfg)
         if not out_dir.exists(): out_dir.mkdir(parents=True)
         deno_fn = out_dir / ("deno_%s.png" % name)
-        clean_fn = out_dir / ("clean_%s.png" % name)
-        noisy_fn = out_dir / ("noisy_%s.png" % name)
         colanet.utils.io.save_image(deno[0],deno_fn)
-        colanet.utils.io.save_image(clean[0],clean_fn)
-        colanet.utils.io.save_image(noisy[0],noisy_fn)
+        # clean_fn = out_dir / ("clean_%s.png" % name)
+        # colanet.utils.io.save_image(clean[0],clean_fn)
+        # noisy_fn = out_dir / ("noisy_%s.png" % name)
+        # colanet.utils.io.save_image(noisy[0],noisy_fn)
 
         # -- psnr --
+        # deno = (deno*255.).type(th.uint8)/255. # convert
         noisy_psnr = colanet.utils.metrics.compute_psnrs(noisy,clean,div=1.)[0]
         psnr = colanet.utils.metrics.compute_psnrs(deno,clean,div=1.)[0]
         ssim = colanet.utils.metrics.compute_ssims(deno,clean,div=1.)[0]
+        # print(noisy_psnr)
+        # print(psnr,ssim)
 
         # -- append results --
         results.psnrs.append(psnr)
@@ -133,6 +134,9 @@ def run_exp(cfg):
         results.names.append([name])
 
     return results
+
+def get_dir_name(cfg):
+    return "%s/%s/%s_%s" % (cfg.tag,cfg.model_name,cfg.dname,cfg.sigma)
 
 def rescale(img):
     if th.is_tensor(img):
@@ -148,7 +152,7 @@ def default_cfg():
     cfg.isize = None
     cfg.num_workers = 4
     cfg.device = "cuda:0"
-    cfg.color = "bw"
+    cfg.bw = True
     return cfg
 
 def main():
@@ -162,12 +166,12 @@ def main():
     cache_dir = ".cache_io"
     cache_name = "test_rgb_img" # current!
     cache = cache_io.ExpCache(cache_dir,cache_name)
-    cache.clear()
+    # cache.clear()
 
     # -- get mesh --
     model_names = ["original"]#,"refactored"]
-    dnames = ["bsd68","urban100"]
-    sigmas = [10,15,25,30,50,70]
+    dnames = ["bsd68","set12","urban100"]
+    sigmas = [50,10,15,25,30,70]
     internal_adapt_nsteps = [0]
     internal_adapt_nepochs = [5]
     ws,wt = [29],[0]
@@ -180,6 +184,7 @@ def main():
 
     # -- group with default --
     cfg = default_cfg()
+    cfg.tag = "original"
     cache_io.append_configs(exps,cfg) # merge the two
 
     # -- run exps --
@@ -195,6 +200,7 @@ def main():
 
         # -- logic --
         uuid = cache.get_uuid(exp) # assing ID to each Dict in Meshgrid
+        # if exp.dname in ["set12","urban100"]: cache.clear_exp(uuid)
         results = cache.load_exp(exp) # possibly load result
         if results is None: # check if no result
             exp.uuid = uuid

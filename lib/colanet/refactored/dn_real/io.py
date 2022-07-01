@@ -30,6 +30,7 @@ def load_model(data_sigma):
     # -- model --
     model = Model(args,checkpoint)
     model.model.load_state_dict(th.load(weights,map_location='cuda'))
+    model.eval()
     return model
 
 def get_options():

@@ -32,4 +32,4 @@ def make_model(args):
         return net
     else:
         raise ValueError('Wrong Mode.')
-        
+

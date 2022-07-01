@@ -1,7 +1,10 @@
+import dnls
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import gradcheck
+from einops import rearrange,repeat
+
 """
 fundamental functions
 """
@@ -24,7 +27,7 @@ def same_padding(images, ksizes, strides, rates):
     return images, paddings
 
 
-def extract_image_patches(images, ksizes, strides, rates, padding='same'):
+def extract_image_patches(images, ksizes, strides, rates, padding='same', coords=None):
     """
     Extract patches from images and put them in the C output dimension.
     :param padding:
@@ -46,11 +49,23 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same'):
     else:
         raise NotImplementedError('Unsupported padding type: {}.\
                 Only "same" or "valid" are supported.'.format(padding))
+    # print("images.shape: ",images.shape,ksizes,strides)
 
-    unfold = torch.nn.Unfold(kernel_size=ksizes,
-                             padding=0,
-                             stride=strides)
+    t = images.shape[0]
+    ksize = ksizes[0]
+    stride = strides[0]
+    print("ksize,stride: ",ksize,stride)
+    unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,adj=True)
     patches = unfold(images)
+    patches = rearrange(patches,'(t n) 1 1 c h w -> t (c h w) n',t=t)
+    print("[1] patches.shape: ",patches.shape)
+
+    # folder = dnls.ifold.iFold((T,C,H,W),coords,stride=stride,dilation=1,adj=True)
+
+    unfold = torch.nn.Unfold(kernel_size=ksizes,padding=0,stride=strides)
+    patches = unfold(images)
+    print("[2] patches.shape: ",patches.shape)
+
     return patches, paddings
 
 """
@@ -81,20 +96,24 @@ class ContextualAttention_Enhance(nn.Module):
                                padding=0)
         self.phi = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
                              padding=0)
-    def forward(self, b):
+
+    def forward(self, b, coords=None):
 
         kernel = self.ksize
+        coords = None
 
         b1 = self.g(b)
         b2 = self.theta(b)
         b3 = self.phi(b)
 
         raw_int_bs = list(b1.size())  # b*c*h*w
+        coords = coords
 
         patch_28, paddings_28 = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
                                                       strides=[self.stride_1, self.stride_1],
                                                       rates=[1, 1],
-                                                      padding='same')
+                                                      padding='same',coords=coords)
+        print("patch_28.shape: ",patch_28.shape)
         patch_28 = patch_28.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_28 = patch_28.permute(0, 4, 1, 2, 3)
         patch_28_group = torch.split(patch_28, 1, dim=0)
@@ -102,7 +121,9 @@ class ContextualAttention_Enhance(nn.Module):
         patch_112, paddings_112 = extract_image_patches(b2, ksizes=[self.ksize, self.ksize],
                                                         strides=[self.stride_2, self.stride_2],
                                                         rates=[1, 1],
-                                                        padding='same')
+                                                        padding='same',coords=coords)
+        print("patch_112.shape: ",patch_112.shape)
+
 
         patch_112 = patch_112.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_112 = patch_112.permute(0, 4, 1, 2, 3)
@@ -111,31 +132,71 @@ class ContextualAttention_Enhance(nn.Module):
         patch_112_2, paddings_112_2 = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
                                                         strides=[self.stride_2, self.stride_2],
                                                         rates=[1, 1],
-                                                        padding='same')
+                                                        padding='same',coords=None)
+
 
         patch_112_2 = patch_112_2.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_112_2 = patch_112_2.permute(0, 4, 1, 2, 3)
         patch_112_group_2 = torch.split(patch_112_2, 1, dim=0)
         f_groups = torch.split(b3, 1, dim=0)
+        print("f_groups.shape: ",[f.shape for f in f_groups])
+        plist = [patch_112_group_2, patch_28_group, patch_112_group]
+        for p in plist:
+            print("shape: ",[gr.shape for gr in p])
+
         y = []
+        # -- process each batch separately --
         for xii,xi, wi,pi in zip(f_groups,patch_112_group_2, patch_28_group, patch_112_group):
+            # print("xii,xi,wi,pi: ",xii.shape,xi.shape,wi.shape,pi.shape)
             w,h = xii.shape[2], xii.shape[3]
             _, paddings = same_padding(xii, [self.ksize, self.ksize], [1, 1], [1, 1])
             # wi = wi[0]  # [L, C, k, k]
             c_s = pi.shape[2]
             k_s = wi[0].shape[2]
+            print("[pre] wi.shape: ",wi.shape)
+            print("[pre] xi.shape: ",xi.shape)
             wi = wi.view(wi.shape[0],wi.shape[1],-1)
-            xi = xi.permute(0, 2, 3, 4, 1)
+            xi = xi.permute(0, 2, 3, 4, 1) # keep contiguous?
             xi = xi.view(xi.shape[0],-1,xi.shape[4])
-            score_map = torch.matmul(wi,xi)
+            print("wi.shape: ",wi.shape)
+            print("xi.shape: ",xi.shape)
+
+            # -- compute cross-scale search inplace --
+            # fold,wfold = dnls.ifold.iFold(),dnls.ifold.iFold()
+            # scatter = dnls.scatter_nl(scale=1)
+            # dnls_search = dnls.xsearch.CrossScaleSearch(flows.fflow, flows.bflow, k, ps, pt,
+            #                                    ws, wt, chnls=chnls,dilation=1, stride=1)
+            # queryInds = dnls.utils.inds.get_query_batch(index,qSearch,qStride,
+            #                                             t,h,w,device)
+            # nlDists_cu,nlInds_cu = dnls_search(x,queryInds)
+            # yi = F.softmax(nlDists_cu*self.softmax_scale,1)
+            # patches = scatter_nl(x,queryInds)
+            # zi = yi @ patches
+            # ones = th.ones_like(zi)
+            # zi = fold(zi)
+            # ones = wfold(ones)
+            # zi = zi / ones
+            # y.append(zi)
+
+            # -- compute cross-scale --
+            score_map = torch.matmul(wi,xi) # q * v^T
+            print("score_map.shape: ",score_map.shape)
             score_map = score_map.view(score_map.shape[0],score_map.shape[1],w,h)
             b_s, l_s, h_s, w_s = score_map.shape
+            print("score_map.shape: ",score_map.shape)
 
             yi = score_map.view(b_s, l_s, -1)
+            print("[1] yi.shape: ",yi.shape)
             yi = F.softmax(yi*self.softmax_scale, dim=2).view(l_s, -1)
             pi = pi.view(h_s * w_s, -1)
+            print("pi.shape: ",pi.shape)
             yi = torch.mm(yi, pi)
-            yi=yi.view(b_s, l_s, c_s, k_s, k_s)[0]
+            print("[2] yi.shape: ",yi.shape)
+            print(self.stride_1)
+            exit(0)
+
+
+            yi = yi.view(b_s, l_s, c_s, k_s, k_s)[0]
             zi = yi.view(1, l_s, -1).permute(0, 2, 1)
             zi = torch.nn.functional.fold(zi, (raw_int_bs[2], raw_int_bs[3]), (kernel, kernel), padding=paddings[0], stride=self.stride_1)
             inp = torch.ones_like(zi)
@@ -143,13 +204,18 @@ class ContextualAttention_Enhance(nn.Module):
             out_mask = torch.nn.functional.fold(inp_unf, (raw_int_bs[2], raw_int_bs[3]), (kernel, kernel), padding=paddings[0], stride=self.stride_1)
             zi = zi / out_mask
             y.append(zi)
+
         y = torch.cat(y, dim=0)
         y = self.W(y)
         y = b + y
+
         if self.add_SE:
             y_SE=self.SE(y)
             y=self.conv33(torch.cat((y_SE*y,y),dim=1))
+
+        print("y.shape: ",y.shape)
         return y
+
     def GSmap(self,a,b):
         return torch.matmul(a,b)
 
@@ -182,6 +248,8 @@ class size_selector(nn.Module):
         b = self.selector_b(o1)
         v = torch.cat((a,b),dim=1)
         v = self.softmax(v)
-        a = v[:,0].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        b = v[:,1].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        a = v[:,0,...,None,None,None]#.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        b = v[:,1,...,None,None,None]#.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        # a = v[:,0].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        # b = v[:,1].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
         return a,b

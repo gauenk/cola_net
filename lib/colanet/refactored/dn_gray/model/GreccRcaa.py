@@ -16,6 +16,7 @@ class RR(nn.Module):
         n_resblocks = 16  # args.n_resblocks
         n_feats = 64  # args.n_feats
         kernel_size = 3
+        self.n_resblocks = n_resblocks
 
         rgb_mean = (0.4488, 0.4371, 0.4040)
         rgb_std = (1.0, 1.0, 1.0)
@@ -39,19 +40,72 @@ class RR(nn.Module):
             conv(n_feats, args.n_colors, kernel_size)
         ]
 
+        # self.add_mean = common.MeanShift(args.rgb_range, rgb_mean, rgb_std, 1)
+
+        # self.head = nn.Sequential(*m_head)
+        # self.body = nn.Sequential(*m_body)
+        # self.tail = nn.Sequential(*m_tail)
+
+        # msa = CES(in_channels=n_feats,num=args.stages)#blocks=args.blocks)
+        # i = 0 # init
+
+        # # -- layer 0 -- "define head module"
+        # # m_head = [conv(args.n_colors, n_feats, kernel_size)]
+        # layer_i = conv(args.n_colors, n_feats, kernel_size)
+        # self.add_module('head%d' % i, layer_i)
+        # i+=1
+
+        # # -- layers 1-3 -- "define body module"
+        # i = 0 # reset
+        # # m_body = [
+        # #     common.ResBlock(
+        # #         conv, n_feats, kernel_size, nn.PReLU(), res_scale=args.res_scale
+        # #     ) for _ in range(n_resblocks // 2)
+        # # ]
+        # for _ in range(n_resblocks // 2):
+        #     layer_i = common.ResBlock(conv, n_feats, kernel_size, nn.PReLU(), res_scale=args.res_scale)
+        #     self.add_module('body%d' % i, layer_i)
+        #     i+= 1
+
+        # # -- msa layer --
+        # # m_body.append(msa)
+        # layer_i = msa
+        # self.add_module('body%d' % i, layer_i)
+        # i+= 1
+
+        # # -- finish out body --
+        # for _ in range(n_resblocks // 2):
+        #     # m_body.append(common.ResBlock(conv, n_feats, kernel_size, nn.PReLU(), res_scale=args.res_scale))
+        #     layer_i = common.ResBlock(conv, n_feats, kernel_size, nn.PReLU(), res_scale=args.res_scale)
+        #     self.add_module('body%d' % i, layer_i)
+        #     i+= 1
+
+        # # -- finish of "body" --
+        # # m_body.append(conv(n_feats, n_feats, kernel_size))
+        # layer_i = conv(n_feats, n_feats, kernel_size)
+        # self.add_module('body%d' % i, layer_i)
+        # i+= 1
+
+        # # -- tail! --
+        # # m_tail = [conv(n_feats, args.n_colors, kernel_size)]
+        # i = 0
+        # layer_i = conv(n_feats, args.n_colors, kernel_size)
+        # self.add_module('tail%d' % i, layer_i)
+        # i+= 1
+
         self.add_mean = common.MeanShift(args.rgb_range, rgb_mean, rgb_std, 1)
 
         self.head = nn.Sequential(*m_head)
         self.body = nn.Sequential(*m_body)
         self.tail = nn.Sequential(*m_tail)
 
-    def forward(self, x):
-        res = self.head(x)
-
-        res = self.body(res)
-
-        res = self.tail(res)
-
+    def forward(self, x, coords=None):
+        # print(x.shape)
+        res = x
+        for name, module in self._modules.items():
+            if name == "add_mean": continue
+            if name == "body.8": res = module(res,coords)
+            else: res = module(res)
         return x+res
 
     def load_state_dict(self, state_dict, strict=True):
@@ -75,7 +129,7 @@ class RR(nn.Module):
 class CES(nn.Module):
     def __init__(self,in_channels,num=6):
         super(CES,self).__init__()
-        print('num_RB:',num)
+        # print('num_RB:',num)
         RBS1 = [
             common.ResBlock(
                 common.default_conv, n_feats=in_channels, kernel_size=3, act=nn.PReLU(), res_scale=1
@@ -95,10 +149,14 @@ class CES(nn.Module):
         self.c1 = merge_block(in_channels = in_channels,out_channels=in_channels)#CE(in_channels=in_channels)
         self.c2 = merge_block(in_channels = in_channels,out_channels=in_channels)#CE(in_channels=in_channels)
         self.c3 = merge_block(in_channels = in_channels,out_channels=in_channels)
-    def forward(self, x):
-        out = self.c1(x)
+
+    def forward(self, x, coords=None):
+        # print("[ces] x.shape: ",x.shape)
+        out = self.c1(x,coords)
         out = self.RBS1(out)
-        out = self.c2(out)
+        out = self.c2(out,coords)
         out = self.RBS2(out)
-        out = self.c3(out)
+        out = self.c3(out,coords)
+        # print("[ces] out.shape: ",out.shape)
+        # out = x
         return out

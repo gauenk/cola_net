@@ -33,7 +33,9 @@ from torchvision.transforms.functional import center_crop
 
 # -- package imports [to test] --
 import colanet
+import colanet.utils.gpu_mem as gpu_mem
 from colanet.utils.gpu_mem import print_gpu_stats,print_peak_gpu_stats
+import colanet.utils.metrics as metrics
 
 # -- check if reordered --
 from scipy import optimize
@@ -70,50 +72,108 @@ def test_original_refactored(sigma):
 
     # -- params --
     device = "cuda:0"
-    vid_set = "sidd_rgb"
-    vid_name = "00"
-    verbose = False
+    vid_set = "bsd68"
+    verbose = True
     mtype = "gray"
-    ensemble = True
+    ensemble = False
+    chop = False
 
     # -- setup cfg --
     cfg = edict()
     cfg.dname = vid_set
-    cfg.vid_name = vid_name
+    cfg.bw = True
+    cfg.sigma = 50.
+
+    # -- search space params --
+    ws,wt = 29,0
+
+    # -- adaptation params --
+    internal_adapt_nsteps = 0
+    internal_adapt_nepochs = 1
+
+    # -- batching params --
+    batch_size = -1 # unused
 
     # -- video --
     data,loaders = data_hub.sets.load(cfg)
-    groups = data.val.groups
-    indices = [i for i,g in enumerate(groups) if cfg.vid_name == g]
-    index = indices[0]
+    index = 0
+
+    # -- create timer --
+    timer = colanet.utils.timer.ExpTimer()
 
     # -- unpack --
-    sample = data.val[index]
-    noisy,clean = sample['noisy'],sample['clean']
+    sample = data.te[index]
+    noisy,clean = sample['noisy'][None,],sample['clean'][None,]
     noisy,clean = noisy.to(device),clean.to(device)
-    vid_frames = sample['fnums']
+    h,w = 256,256
+    noisy = noisy[:,:,:h,:w].contiguous()
+    clean = clean[:,:,:h,:w].contiguous()
+    # noisy = noisy[:,:,:128,:128].contiguous()
+    # clean = clean[:,:,:128,:128].contiguous()
     noisy /= 255.
+    clean /= 255.
     noisy = noisy[:,[0]].contiguous()
+    clean = clean[:,[0]].contiguous()
+    print("noisy.shape: ",noisy.shape)
+    print("clean.shape: ",noisy.shape)
+    noisy = th.cat([noisy,noisy])
+    clean = th.cat([clean,clean])
+    # noisy = th.cat([noisy,noisy],-1)
+    # clean = th.cat([clean,clean],-1)
+    # noisy = th.cat([noisy,noisy],-2)
+    # clean = th.cat([clean,clean],-2)
+
+    print("noisy.shape: ",noisy.shape)
+
+    # -- compute flow --
+    flows = None
 
     # -- original exec --
-    og_model = colanet.original.load_model(mtype,sigma)
+    og_model = colanet.original.load_model(mtype,sigma).eval()
+    og_model.chop = chop
+    timer.start("original")
+    gpu_mem.reset_peak_gpu_stats()
     with th.no_grad():
-        deno_og = og_model(noisy.clone(),0,ensemble=ensemble).detach()
+        deno_og = og_model(noisy,0,ensemble=ensemble).detach()
+    gpu_mem.print_peak_gpu_stats(True,"og",reset=True)
+    # og_model.train()
+    # deno_og = og_model(noisy,0,ensemble=ensemble)
+    # loss = th.sum((deno_og - clean)**2).sum()
+    # loss.backward()
+    timer.stop("original")
 
     # -- each version --
+    t,c,h,w = noisy.shape
+    coords=[0,0,h,w]
     for ref_version in ["ref"]: #["original","ref"]:
 
+        # -- load model --
+        ref_model = colanet.refactored.load_model(mtype,sigma).eval()
+        ref_model.chop = chop
+
+        # -- optional adapt --
+        run_adapt = (internal_adapt_nsteps>0) and (internal_adapt_nepochs>0)
+        if run_adapt:
+            ref_model.run_internal_adapt(noisy,sigma,flows=flows,
+                                         ws=ws,wt=wt,batch_size=batch_size,
+                                         nsteps=internal_adapt_nsteps,
+                                         nepochs=internal_adapt_nepochs,
+                                         verbose=True)
+
         # -- refactored exec --
-        ref_model = colanet.refactored.load_model(mtype,sigma)#,mode=ref_version)
+        timer.start("refactored")
         with th.no_grad():
-            deno_ref = ref_model(noisy,0,ensemble=ensemble).detach()
+            deno_ref = ref_model.my_fwd(noisy,ensemble=ensemble).detach()
+        timer.stop("refactored")
 
         # -- viz --
         if verbose:
-            print(deno_og[0,0,:3,:3])
-            print(deno_ref[0,0,:3,:3])
+            print(deno_og.shape,clean.shape)
+            print("og: ",metrics.compute_psnrs(deno_og,clean,1.))
+            print("ref: ",metrics.compute_psnrs(deno_ref,clean,1.))
 
         # -- test --
         error = th.sum((deno_og - deno_ref)**2).item()
         if verbose: print("error: ",error)
         assert error < 1e-15
+    print(timer)

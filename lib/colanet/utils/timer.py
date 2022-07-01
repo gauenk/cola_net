@@ -7,6 +7,12 @@ class ExpTimer():
         self.names = []
         self.start_times = []
 
+    def __str__(self):
+        msg = "--- Exp Times ---"
+        for k,v in self.items():
+            msg += "\n%s: %2.3f\n" % (k,v)
+        return msg
+
     def items(self):
         names = ["timer_%s" % name for name in self.names]
         return zip(names,self.times)

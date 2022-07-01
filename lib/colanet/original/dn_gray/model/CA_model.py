@@ -135,7 +135,7 @@ class ContextualAttention_Enhance(nn.Module):
             yi = F.softmax(yi*self.softmax_scale, dim=2).view(l_s, -1)
             pi = pi.view(h_s * w_s, -1)
             yi = torch.mm(yi, pi)
-            yi=yi.view(b_s, l_s, c_s, k_s, k_s)[0]
+            yi = yi.view(b_s, l_s, c_s, k_s, k_s)[0]
             zi = yi.view(1, l_s, -1).permute(0, 2, 1)
             zi = torch.nn.functional.fold(zi, (raw_int_bs[2], raw_int_bs[3]), (kernel, kernel), padding=paddings[0], stride=self.stride_1)
             inp = torch.ones_like(zi)

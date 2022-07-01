@@ -50,4 +50,3 @@ if __name__ == "__main__":
     net = DnCNN(nplanes_in=64,nplanes_out=64,features=64,kernel=3,depth=4,bn=True).cuda()
     input_im = torch.zeros((1,64,8,8)).cuda()
     output_im = net(input_im)
-    print(output_im.shape)

@@ -70,8 +70,7 @@ class Trainer():
                     (batch + 1) * self.args.batch_size,
                     len(self.loader_train.dataset),
                     loss.item(),#display_loss(batch),   # edit for new
-                    psnr_train,
-                    psnr_org,
+                    psnr_train, psnr_org,
                     timer_model.release(),
                     timer_data.release()))
 
@@ -137,7 +136,7 @@ class Trainer():
             if self.args.precision == 'half': tensor = tensor.half()
             # Only test lr can be volatile
             return Variable(tensor, volatile=(volatile and idx==0))
-           
+
         return [_prepare(i, _l) for i, _l in enumerate(l)]
 
     def terminate(self):

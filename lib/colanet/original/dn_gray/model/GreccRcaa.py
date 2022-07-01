@@ -16,6 +16,7 @@ class RR(nn.Module):
         n_resblocks = 16  # args.n_resblocks
         n_feats = 64  # args.n_feats
         kernel_size = 3
+        self.n_resblocks = n_resblocks
 
         rgb_mean = (0.4488, 0.4371, 0.4040)
         rgb_std = (1.0, 1.0, 1.0)

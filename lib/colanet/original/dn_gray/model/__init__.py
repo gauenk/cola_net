@@ -5,6 +5,11 @@ import torch.nn as nn
 import numpy as np
 import random
 
+# -- modules --
+from colanet.utils import clean_code
+import colanet.utils.gpu_mem as gpu_mem
+from . import ca_forward
+
 def test_pad(model, L, modulo=16):
     h, w = L.size()[-2:]
     paddingBottom = int(np.ceil(h / modulo) * modulo - h)
@@ -74,6 +79,7 @@ def test_x8_2(model, L):
     E = output_cat.mean(dim=0, keepdim=False)
     return E
 
+@clean_code.add_methods_from(ca_forward)
 class Model(nn.Module):
     def __init__(self, args, ckp):
         super(Model, self).__init__()
@@ -208,6 +214,7 @@ class Model(nn.Module):
             sr_list = []
             for i in range(0, 4, n_GPUs):
                 lr_batch = torch.cat(lr_list[i:(i + n_GPUs)], dim=0)
+                # print("lr_batch.shape: ",lr_batch.shape)
                 if self.ensemble == False:
                     sr_batch = self.model(lr_batch)
                 else:

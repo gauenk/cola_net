@@ -39,7 +39,7 @@ def main():
     net.model.load_state_dict(torch.load(opt.logdir,map_location='cuda')) # this model is trained at cuda1.
     model = net.cuda()
     model.eval()
-    
+
     # load data info
     print('Loading data info ...\n')
     files_source = glob.glob(os.path.join(opt.test_data, '*.png'))

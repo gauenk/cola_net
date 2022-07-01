@@ -77,7 +77,7 @@ class ResBlock(nn.Module):
         res = self.body(x).mul(self.res_scale)
         res += x
         return res
-    
+
 class ResBlock2(nn.Module):
     def __init__(
         self, conv, n_feats, n_feats_out, kernel_size,
