@@ -19,9 +19,12 @@ class merge_block(nn.Module):
         self.att_SK = nn.Linear(in_features=vector_length,out_features=out_channels)
         self.softmax = nn.Softmax(dim=1)
 
-    def forward(self, x, coords=None):
+    def forward(self, x, coords=None, use_dnls=False):
         out1 = self.SKUnit(x)[:,None]
-        out2 = self.CAUnit(x,coords)[:,None]
+        if use_dnls:
+            out2 = self.CAUnit.dnls_forward(x,coords)[:,None]
+        else:
+            out2 = self.CAUnit(x,coords)[:,None]
         out = torch.cat((out2,out1),dim=1)
         U = torch.sum(out,dim=1)
         attention_vector = U.mean(-1).mean(-1)

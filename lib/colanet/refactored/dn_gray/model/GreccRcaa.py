@@ -149,14 +149,15 @@ class CES(nn.Module):
         self.c1 = merge_block(in_channels = in_channels,out_channels=in_channels)#CE(in_channels=in_channels)
         self.c2 = merge_block(in_channels = in_channels,out_channels=in_channels)#CE(in_channels=in_channels)
         self.c3 = merge_block(in_channels = in_channels,out_channels=in_channels)
+        self.use_dnls = True
 
     def forward(self, x, coords=None):
         # print("[ces] x.shape: ",x.shape)
-        out = self.c1(x,coords)
+        out = self.c1(x,coords,self.use_dnls)
         out = self.RBS1(out)
-        out = self.c2(out,coords)
+        out = self.c2(out,coords,self.use_dnls)
         out = self.RBS2(out)
-        out = self.c3(out,coords)
+        out = self.c3(out,coords,self.use_dnls)
         # print("[ces] out.shape: ",out.shape)
         # out = x
         return out

@@ -97,6 +97,105 @@ class ContextualAttention_Enhance(nn.Module):
         self.phi = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
                              padding=0)
 
+    def dnls_forward(self, b, coords=None):
+
+        # -- get images --
+        b1 = self.g(b)
+        b2 = self.theta(b)
+        b3 = self.phi(b)
+
+        # -- unpack parameters --
+        t,c,h,w = b1.shape
+        kernel = self.ksize
+        vshape = b1.shape
+        ps,stride = self.ksize,self.stride_1
+        chnls = b2.shape[1]
+        dil,adj = 1,True
+        pt,ws,wt = 1,-1,-1
+        coords = [0,0,h,w] if coords is None else coords
+        device = b.device
+
+        # -- get search size --
+        cr_h = coords[2] - coords[0]
+        cr_w = coords[3] - coords[1]
+
+        # -- batching params --
+        nh = (cr_h-1)//stride+1
+        nw = (cr_w-1)//stride+1
+        ntotal = t * nh * nw
+        nbatch = 512
+        nbatches = (ntotal-1) // nbatch + 1
+
+        # -- offsets --
+        oh0,ow0,oh1,ow1 = 3,3,1,1
+
+        # -- define functions --
+        ifold = dnls.ifold.iFold(vshape,coords,stride=stride,dilation=dil,adj=adj)
+        wfold = dnls.ifold.iFold(vshape,coords,stride=stride,dilation=dil,adj=adj)
+        iunfold = dnls.iunfold.iUnfold(ps,coords,stride=stride,dilation=dil,adj=adj)
+        xsearch = dnls.xsearch.CrossSearchNl(None, None, -1, ps, pt, ws, wt,
+                                             oh0, ow0, oh1, ow1,
+                                             chnls=chnls,dilation=dil, stride=stride)
+
+        # -- batch across queries --
+        for index in range(nbatches):
+
+            # -- batch info --
+            qindex = min(nbatch * index,ntotal)
+            nbatch_i =  min(nbatch, ntotal - qindex)
+
+            # -- get patches --
+            iqueries = dnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride,
+                                                        coords,t,device)
+
+            # -- search --
+            nlDists_cu,nlInds_cu = xsearch(b1,b2,iqueries)
+
+            # -- attn mask --
+            yi = F.softmax(nlDists_cu*self.softmax_scale,1)
+
+            # -- scatter new vid type --
+            patches = iunfold(b3,0,nbatch)
+            zi = yi @ patches
+            ones = th.ones_like(zi)
+
+            # -- fold into videos --
+            ifold(zi,qindex)
+            wfold(ones,qindex)
+
+        # -- get post-attn vid --
+        y = ifold.vid
+        Z = wfold.vid
+        y = y / Z
+
+        # -- final transform --
+        y = self.W(y)
+        y = b + y
+
+        if self.add_SE:
+            y_SE=self.SE(y)
+            y=self.conv33(torch.cat((y_SE*y,y),dim=1))
+
+        return y
+
+        # # -- compute cross-scale search inplace --
+        # # fold,wfold = dnls.ifold.iFold(),dnls.ifold.iFold()
+        # fold,unfold = th.nn.functional.fold,th.nn.functional.unfold
+        # # unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,adj=True)
+        # scatter = dnls.scatter_nl(scale=1)
+        # dnls_search = dnls.xsearch.CrossScaleSearch(flows.fflow, flows.bflow, k, ps, pt,
+        #                                             ws, wt, chnls=chnls,dilation=1, stride=1)
+
+        # yi = F.softmax(nlDists_cu*self.softmax_scale,1)
+        # patches = scatter_nl(x,queryInds)
+        # zi = yi @ patches
+        # ones = th.ones_like(zi)
+        # zi = fold(zi)
+        # ones = wfold(ones)
+        # zi = zi / ones
+        # y.append(zi)
+
+
     def forward(self, b, coords=None):
 
         kernel = self.ksize
@@ -161,23 +260,6 @@ class ContextualAttention_Enhance(nn.Module):
             print("wi.shape: ",wi.shape)
             print("xi.shape: ",xi.shape)
 
-            # -- compute cross-scale search inplace --
-            # fold,wfold = dnls.ifold.iFold(),dnls.ifold.iFold()
-            # scatter = dnls.scatter_nl(scale=1)
-            # dnls_search = dnls.xsearch.CrossScaleSearch(flows.fflow, flows.bflow, k, ps, pt,
-            #                                    ws, wt, chnls=chnls,dilation=1, stride=1)
-            # queryInds = dnls.utils.inds.get_query_batch(index,qSearch,qStride,
-            #                                             t,h,w,device)
-            # nlDists_cu,nlInds_cu = dnls_search(x,queryInds)
-            # yi = F.softmax(nlDists_cu*self.softmax_scale,1)
-            # patches = scatter_nl(x,queryInds)
-            # zi = yi @ patches
-            # ones = th.ones_like(zi)
-            # zi = fold(zi)
-            # ones = wfold(ones)
-            # zi = zi / ones
-            # y.append(zi)
-
             # -- compute cross-scale --
             score_map = torch.matmul(wi,xi) # q * v^T
             print("score_map.shape: ",score_map.shape)
@@ -193,7 +275,6 @@ class ContextualAttention_Enhance(nn.Module):
             yi = torch.mm(yi, pi)
             print("[2] yi.shape: ",yi.shape)
             print(self.stride_1)
-            exit(0)
 
 
             yi = yi.view(b_s, l_s, c_s, k_s, k_s)[0]
