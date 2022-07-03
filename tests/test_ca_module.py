@@ -175,6 +175,6 @@ def test_original_refactored(sigma):
         # -- test --
         error = th.sum((deno_og - deno_ref)**2).item()
         if verbose: print("error: ",error)
-        assert error < 1e-15
+        assert error < 1e-7
     print(timer)
 

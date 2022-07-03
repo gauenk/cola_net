@@ -1,3 +1,4 @@
+import dnls
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -129,21 +130,33 @@ class ContextualAttention_Enhance(nn.Module):
             xi = xi.view(xi.shape[0],-1,xi.shape[4])
             score_map = torch.matmul(wi,xi)
             score_map = score_map.view(score_map.shape[0],score_map.shape[1],w,h)
+            print("score_map.shape: ",score_map.shape)
             b_s, l_s, h_s, w_s = score_map.shape
 
             yi = score_map.view(b_s, l_s, -1)
             yi = F.softmax(yi*self.softmax_scale, dim=2).view(l_s, -1)
             pi = pi.view(h_s * w_s, -1)
+            print("pi.shape: ",pi.shape)
+            print("yi.shape: ",yi.shape)
             yi = torch.mm(yi, pi)
+            print("[post] yi.shape: ",yi.shape)
             yi = yi.view(b_s, l_s, c_s, k_s, k_s)[0]
             zi = yi.view(1, l_s, -1).permute(0, 2, 1)
+            print("raw_int_bs[2],kernel: ",raw_int_bs[2],kernel)
             zi = torch.nn.functional.fold(zi, (raw_int_bs[2], raw_int_bs[3]), (kernel, kernel), padding=paddings[0], stride=self.stride_1)
             inp = torch.ones_like(zi)
             inp_unf = torch.nn.functional.unfold(inp, (kernel, kernel), padding=paddings[0], stride=self.stride_1)
+            print("raw_int_bs[2],kernel,pads: ",raw_int_bs[2],kernel,paddings[0])
+            print("inp_unf.shape: ",inp_unf.shape)
             out_mask = torch.nn.functional.fold(inp_unf, (raw_int_bs[2], raw_int_bs[3]), (kernel, kernel), padding=paddings[0], stride=self.stride_1)
             zi = zi / out_mask
+            print("zi.shape: ",zi.shape)
             y.append(zi)
         y = torch.cat(y, dim=0)
+        print("[final] y.shape: ",y.shape)
+        y_s = y/y.max()
+        dnls.testing.data.save_burst(y_s[:,:3],"./output/ca","yog")
+
         y = self.W(y)
         y = b + y
         if self.add_SE:

@@ -1,9 +1,11 @@
 import dnls
 import torch
+import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import gradcheck
 from einops import rearrange,repeat
+from colanet.utils.misc import assert_nonan
 
 """
 fundamental functions
@@ -42,29 +44,44 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same', coords
     assert padding in ['same', 'valid']
     paddings = (0, 0, 0, 0)
 
-    if padding == 'same':
-        images, paddings = same_padding(images, ksizes, strides, rates)
-    elif padding == 'valid':
-        pass
-    else:
-        raise NotImplementedError('Unsupported padding type: {}.\
-                Only "same" or "valid" are supported.'.format(padding))
+    images_pad, paddings = same_padding(images, ksizes, strides, rates)
+    # if padding == 'same':
+    #     images, paddings = same_padding(images, ksizes, strides, rates)
+    # elif padding == 'valid':
+    #     pass
+    # else:
+    #     raise NotImplementedError('Unsupported padding type: {}.\
+    #             Only "same" or "valid" are supported.'.format(padding))
     # print("images.shape: ",images.shape,ksizes,strides)
-
-    t = images.shape[0]
+    t,c,h,w = images.shape
     ksize = ksizes[0]
+    adj = (ksize//2) - paddings[0]
     stride = strides[0]
-    print("ksize,stride: ",ksize,stride)
-    unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,adj=True)
+    unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,
+                                  adj=adj,only_full=False,border="zero")
     patches = unfold(images)
-    patches = rearrange(patches,'(t n) 1 1 c h w -> t (c h w) n',t=t)
-    print("[1] patches.shape: ",patches.shape)
+    patches_a = rearrange(patches,'(t n) 1 1 c h w -> t (c h w) n',t=t)
+    patches = patches_a
 
+    # unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,
+    #                               match_nn=True)#adj=ps//2,only_full=True)
+    # patches = unfold(images_pad)
+    # print(patches[0,0,0,0])
+    # patches_b = rearrange(patches,'(t n) 1 1 c h w -> t (c h w) n',t=t)
+    # print(patches_b.shape)
+
+    # diff = th.abs(patches_a - patches_b).mean(1)
+    # diff = rearrange(diff,'t (h w) -> t 1 h w',h=h//4)
+    # dnls.testing.data.save_burst(diff,'output/ca/','diff')
+    # error = diff.sum()
+    # print("error: ",error)
+    # exit(0)
+
+    # print("[1] patches.shape: ",patches.shape)
     # folder = dnls.ifold.iFold((T,C,H,W),coords,stride=stride,dilation=1,adj=True)
-
-    unfold = torch.nn.Unfold(kernel_size=ksizes,padding=0,stride=strides)
-    patches = unfold(images)
-    print("[2] patches.shape: ",patches.shape)
+    # unfold = torch.nn.Unfold(kernel_size=ksizes,padding=0,stride=strides)
+    # patches = unfold(images)
+    # print("[2] patches.shape: ",patches.shape)
 
     return patches, paddings
 
@@ -108,10 +125,12 @@ class ContextualAttention_Enhance(nn.Module):
         t,c,h,w = b1.shape
         kernel = self.ksize
         vshape = b1.shape
-        ps,stride = self.ksize,self.stride_1
+        ps = self.ksize
+        stride0 = 4#self.stride_1
+        stride1 = 1#self.stride_2
         chnls = b2.shape[1]
         dil,adj = 1,True
-        pt,ws,wt = 1,-1,-1
+        ws,pt,wt = -1,1,0
         coords = [0,0,h,w] if coords is None else coords
         device = b.device
 
@@ -120,24 +139,59 @@ class ContextualAttention_Enhance(nn.Module):
         cr_w = coords[3] - coords[1]
 
         # -- batching params --
-        nh = (cr_h-1)//stride+1
-        nw = (cr_w-1)//stride+1
+        nh = (cr_h-1)//stride0+1
+        nw = (cr_w-1)//stride0+1
         ntotal = t * nh * nw
-        nbatch = 512
+        nbatch = ntotal//2
         nbatches = (ntotal-1) // nbatch + 1
+        print(nbatch)
 
         # -- offsets --
-        oh0,ow0,oh1,ow1 = 3,3,1,1
+        # oh0,ow0,oh1,ow1 = 3,3,1,1
+        oh0,ow0,oh1,ow1 = 1,1,3,3
 
         # -- define functions --
-        ifold = dnls.ifold.iFold(vshape,coords,stride=stride,dilation=dil,adj=adj)
-        wfold = dnls.ifold.iFold(vshape,coords,stride=stride,dilation=dil,adj=adj)
-        iunfold = dnls.iunfold.iUnfold(ps,coords,stride=stride,dilation=dil,adj=adj)
+        # ifold = dnls.ifold.iFold(vshape,coords,stride=stride0,dilation=dil,adj=adj)
+        # wfold = dnls.ifold.iFold(vshape,coords,stride=stride0,dilation=dil,adj=adj)
+        adj = 0
+        iunfold = dnls.iunfold.iUnfold(ps,coords,stride=stride1,dilation=dil,
+                                       adj=adj,only_full=False,border="zero")
+        # iunfold = dnls.iunfold.iUnfold(ps,coords,stride=stride1,dilation=dil,adj=True)
         xsearch = dnls.xsearch.CrossSearchNl(None, None, -1, ps, pt, ws, wt,
                                              oh0, ow0, oh1, ow1,
-                                             chnls=chnls,dilation=dil, stride=stride)
+                                             chnls=chnls,dilation=dil,stride=stride1,
+                                             use_bound=False)
+        # -- unfold patches --
+        # patches = th.nn.functional.unfold(b2,(ps,ps))#,0,-1)
+        # b1_ones = th.ones_like(b1)
+        # b1 = th.ones_like(b1)
+        # patches_a,_ = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
+        #                                     strides=[self.stride_1, self.stride_1],
+        #                                     rates=[1, 1],padding='same')
+        # patches_b,_ = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
+        #                                     strides=[self.stride_2, self.stride_2],
+        #                                     rates=[1, 1],padding='same')
+        # patches,_ = extract_image_patches(b2,ksizes=[self.ksize, self.ksize],
+        #                                   strides=[self.stride_2, self.stride_2],
+        #                                   rates=[1, 1],padding='same')
+        # patches = patches.transpose(2,1)
+        # print("patches.shape: ",patches.shape)
+
+        patches = iunfold(b2,0,-1)
+        patches = rearrange(patches,'(t n) 1 1 c h w -> t n (c h w)',t=t)
+        assert_nonan(patches)
+        _,xsize,dim = patches.shape
+        # print(patches.shape)
+        # exit(0)
+        # print(patches[0,0].view(-1,7,7)[:3][0])
+        # print(patches_iu[0,0].view(-1,7,7)[:3][0])
+        # exit(0)
+
+
 
         # -- batch across queries --
+        agg,wagg = [],[]
+        nbatches = 2
         for index in range(nbatches):
 
             # -- batch info --
@@ -145,28 +199,106 @@ class ContextualAttention_Enhance(nn.Module):
             nbatch_i =  min(nbatch, ntotal - qindex)
 
             # -- get patches --
-            iqueries = dnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride,
+            iqueries = dnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride0,
                                                         coords,t,device)
+            th.cuda.synchronize()
 
             # -- search --
-            nlDists_cu,nlInds_cu = xsearch(b1,b2,iqueries)
+            # print(iqueries)
+            nlDists_cu,nlInds_cu = xsearch(b1,iqueries,b3)
+            # nlDists_cu,nlInds_cu = xsearch(b1_ones,iqueries,b1)
+            # th.cuda.synchronize()
+            # print("nlDists_cu.shape: ",nlDists_cu.shape)
+            nlDists_cu = rearrange(nlDists_cu,'d0 h w -> d0 (h w)')
+
+            # print("patches_a.shape: ",patches_a.shape)
+            # print("patches_b.shape: ",patches_b.shape)
+            # patches_a = th.ones_like(patches_a)
+            # patches_b = th.ones_like(patches_b)
+            # score_map = th.matmul(patches_a[index].T,patches_b[index])
+            # print("nlDists_cu.shape: ",nlDists_cu.shape)
+            # exit(0)
+
+            # -- viz --
+            # print(nlDists_cu[:3,:3])
+            # print(score_map[:3,:3])
+
+            # print(nlDists_cu[96:99,96:99])
+            # print(score_map[96:99,96:99])
+
+
+            # -- test --
+            # diff = th.abs(nlDists_cu - score_map)/(th.abs(score_map)+1e-10)
+            # error = diff.sum()
+            # print(error)
+            # error = diff.max()
+            # print(error)
 
             # -- attn mask --
             yi = F.softmax(nlDists_cu*self.softmax_scale,1)
+            assert_nonan(yi)
 
-            # -- scatter new vid type --
-            patches = iunfold(b3,0,nbatch)
-            zi = yi @ patches
+            # -- scatter new vid type for each ti --
+            # zi = th.matmul(yi, patches[index])
+            # zi_iu = th.matmul(yi, patches_iu[index])
+            # print("patches.shape: ",patches[index].shape)
+            # print("patches_iu.shape: ",patches_iu[index].shape)
+
+            # diff = th.abs(zi - zi_iu)/(th.abs(zi)+1e-10)
+            # error = diff.sum()
+            # print(error)
+            # error = diff.max()
+            # print(error)
+            # exit(0)
+            # print("iqueries.shape: ",iqueries.shape)
+            zi = []
+            for ti in range(t):
+                args_i = th.where(iqueries[:,0] == ti)
+                zi_i = th.matmul(yi[args_i], patches[ti])
+                zi.append(zi_i)
+            zi = th.cat(zi)
+            assert_nonan(zi)
+
+
+            # print("zi.shape: ",zi.shape)
+            # print("ones.shape: ",ones.shape)
+
+            # -- prepare shape --
+            zi = zi[None,:]
+            zi = zi.transpose(2,1)
+            # zi = rearrange(zi,'n (c h w) -> n 1 1 c h w',h=ps,w=ps)
             ones = th.ones_like(zi)
 
             # -- fold into videos --
-            ifold(zi,qindex)
-            wfold(ones,qindex)
+            # print(qindex)
+            # print("zi.shape: ",zi.shape)
+            # print("ones.shape: ",ones.shape)
+            # ifold(zi,qindex)
+            # wfold(ones,qindex)
+
+            # -- fold alt. --
+            zi = th.nn.functional.fold(zi,(256,256),(ps,ps),stride=stride0,padding=3)
+            agg.append(zi)
+            wi = th.nn.functional.fold(ones,(256,256),(ps,ps),stride=stride0,padding=3)
+            wagg.append(wi)
 
         # -- get post-attn vid --
-        y = ifold.vid
-        Z = wfold.vid
+        y = th.cat(agg)
+        Z = th.cat(wagg)
+        print("[final] y.shape: ",y.shape)
+        # y = ifold.vid
+        # Z = wfold.vid
+        assert_nonan(y)
+        y_s = y/y.max()
+        dnls.testing.data.save_burst(y_s[:,:3],"./output/ca","y")
+        assert_nonan(Z)
+        Z_s = Z/Z.max()
+        dnls.testing.data.save_burst(Z_s[:,:3],"./output/ca/","z")
+
         y = y / Z
+        assert_nonan(y)
+        yz_s = y/y.max()
+        dnls.testing.data.save_burst(yz_s[:,:3],"./output/ca/","yz")
 
         # -- final transform --
         y = self.W(y)
