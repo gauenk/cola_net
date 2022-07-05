@@ -73,6 +73,7 @@ def test_original_refactored(sigma):
     # -- params --
     device = "cuda:0"
     vid_set = "bsd68"
+    vid_set = "set8"
     verbose = True
     mtype = "gray"
     ensemble = False
@@ -81,6 +82,7 @@ def test_original_refactored(sigma):
     # -- setup cfg --
     cfg = edict()
     cfg.dname = vid_set
+    cfg.vid_name = "motorbike"
     cfg.bw = True
     cfg.sigma = 50.
 
@@ -88,7 +90,7 @@ def test_original_refactored(sigma):
     ws,wt = 29,0
 
     # -- adaptation params --
-    internal_adapt_nsteps = 0
+    internal_adapt_nsteps = 500
     internal_adapt_nepochs = 1
 
     # -- batching params --
@@ -96,18 +98,23 @@ def test_original_refactored(sigma):
 
     # -- video --
     data,loaders = data_hub.sets.load(cfg)
-    index = 0
+    groups = data.te.groups
+    if "vid_name" in cfg:
+        indices = [i for i,g in enumerate(groups) if cfg.vid_name in g]
+        index = indices[0]
+    else: index = 0
 
     # -- create timer --
     timer = colanet.utils.timer.ExpTimer()
 
     # -- unpack --
     sample = data.te[index]
-    noisy,clean = sample['noisy'][None,],sample['clean'][None,]
+    noisy,clean = sample['noisy'],sample['clean']
     noisy,clean = noisy.to(device),clean.to(device)
-    h,w = 256,256
-    noisy = noisy[:,:,:h,:w].contiguous()
-    clean = clean[:,:,:h,:w].contiguous()
+    # t,h,w = 4,128,128
+    t,h,w = 4,256,256
+    noisy = noisy[:t,:,:h,:w].contiguous()
+    clean = clean[:t,:,:h,:w].contiguous()
     # noisy = noisy[:,:,:128,:128].contiguous()
     # clean = clean[:,:,:128,:128].contiguous()
     noisy /= 255.
@@ -116,17 +123,25 @@ def test_original_refactored(sigma):
     clean = clean[:,[0]].contiguous()
     print("noisy.shape: ",noisy.shape)
     print("clean.shape: ",noisy.shape)
-    noisy = th.cat([noisy,noisy])
-    clean = th.cat([clean,clean])
+    # noisy = th.cat([noisy,noisy])
+    # clean = th.cat([clean,clean])
     # noisy = th.cat([noisy,noisy],-1)
     # clean = th.cat([clean,clean],-1)
     # noisy = th.cat([noisy,noisy],-2)
     # clean = th.cat([clean,clean],-2)
+    dnls.testing.data.save_burst(noisy,"./output","noisy")
+    dnls.testing.data.save_burst(clean,"./output","clean")
 
     print("noisy.shape: ",noisy.shape)
 
     # -- compute flow --
     flows = None
+
+    # -- get noisy images --
+    noisy_og = noisy.clone()
+    noisy_og.requires_grad_(True)
+    noisy_ref = noisy.clone()
+    noisy_ref.requires_grad_(True)
 
     # -- original exec --
     og_model = colanet.original.load_model(mtype,sigma).eval()
@@ -134,7 +149,7 @@ def test_original_refactored(sigma):
     timer.start("original")
     gpu_mem.reset_peak_gpu_stats()
     with th.no_grad():
-        deno_og = og_model(noisy,0,ensemble=ensemble).detach()
+        deno_og = og_model(noisy_og,0,ensemble=ensemble).detach()
     gpu_mem.print_peak_gpu_stats(True,"og",reset=True)
     # og_model.train()
     # deno_og = og_model(noisy,0,ensemble=ensemble)
@@ -154,16 +169,23 @@ def test_original_refactored(sigma):
         # -- optional adapt --
         run_adapt = (internal_adapt_nsteps>0) and (internal_adapt_nepochs>0)
         if run_adapt:
-            ref_model.run_internal_adapt(noisy,sigma,flows=flows,
+            # ref_model.run_internal_adapt(noisy,sigma,flows=flows,
+            #                              ws=ws,wt=wt,batch_size=batch_size,
+            #                              nsteps=internal_adapt_nsteps,
+            #                              nepochs=internal_adapt_nepochs,
+            #                              clean_gt=clean,verbose=True)
+            ref_model.run_external_adapt(clean,sigma,flows=flows,
                                          ws=ws,wt=wt,batch_size=batch_size,
                                          nsteps=internal_adapt_nsteps,
                                          nepochs=internal_adapt_nepochs,
-                                         verbose=True)
+                                         noisy_gt=noisy,verbose=True)
 
         # -- refactored exec --
         timer.start("refactored")
         with th.no_grad():
-            deno_ref = ref_model.my_fwd(noisy,ensemble=ensemble).detach()
+            deno_ref = ref_model(noisy_ref,0,ensemble=ensemble).detach()
+            # deno_ref = ref_model.my_fwd(noisy,ensemble=ensemble).detach()
+        gpu_mem.print_peak_gpu_stats(True,"og",reset=True)
         timer.stop("refactored")
 
         # -- viz --
@@ -171,9 +193,9 @@ def test_original_refactored(sigma):
             print(deno_og.shape,clean.shape)
             print("og: ",metrics.compute_psnrs(deno_og,clean,1.))
             print("ref: ",metrics.compute_psnrs(deno_ref,clean,1.))
+            print(timer)
 
         # -- test --
         error = th.sum((deno_og - deno_ref)**2).item()
         if verbose: print("error: ",error)
         assert error < 1e-15
-    print(timer)

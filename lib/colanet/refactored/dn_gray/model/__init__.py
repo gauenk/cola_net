@@ -157,7 +157,6 @@ class Model(nn.Module):
         coords_l = self.get_coords_list(x.shape,128)
         y = th.zeros_like(x)
         for coords in coords_l:
-            print(coords)
             top,left,btm,right = coords
             yi = self.model(x,coords)
             # yi = self.model(x,None)#coords)

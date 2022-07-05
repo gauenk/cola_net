@@ -10,7 +10,7 @@ def select_sigma(sigma):
 def get_options():
     return option.args
 
-def default_options():
+def default_options(sigma=0.):
     args = edict()
     args.scale = [1]
     args.self_ensemble = False
@@ -33,6 +33,7 @@ def default_options():
     args.stages = 6
     args.blocks = 3
     args.act = "relu"
+    args.sigma = sigma
     return args
 
 def crop_offset(in_image, row_offs, col_offs):

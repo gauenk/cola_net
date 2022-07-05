@@ -97,9 +97,11 @@ class CES(nn.Module):
         self.c2 = merge_block(in_channels = in_channels,out_channels=in_channels)#CE(in_channels=in_channels)
         self.c3 = merge_block(in_channels = in_channels,out_channels=in_channels)
     def forward(self, x):
+
         out = self.c1(x)
         out = self.RBS1(out)
         out = self.c2(out)
         out = self.RBS2(out)
         out = self.c3(out)
+
         return out

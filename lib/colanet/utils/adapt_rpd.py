@@ -59,8 +59,9 @@ def point2range(p,reg,lb,ub):
     pend = pmax
 
     # -- assert --
-    assert (pstart >= lb) and (pend <= ub)
-    assert (pend - pstart) == reg
+    info = "%d,%d,%d,%d,%d" % (pstart,lb,pend,ub,reg)
+    assert (pstart >= lb) and (pend <= ub),info
+    assert (pend - pstart) == reg,info
     return pstart,pend
 
 def rslice(vid,region):
@@ -168,6 +169,8 @@ class RegionProposalData():
     def __next__(self):
         # -- get point in image --
         point = self.sample_point()
+        print(point,self.reg_nframes,self.reg_height,self.reg_width,0,
+              self.height,self.width,self.nframes)
 
         # -- center region --
         fstart,fend = point2range(point[0],self.reg_nframes,0,self.nframes)

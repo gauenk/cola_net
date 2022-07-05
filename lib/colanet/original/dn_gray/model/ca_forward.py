@@ -32,7 +32,7 @@ def ca_forward(self,noisy):
     model = self.model
     mod = model.head(noisy)
     nlayers = len(model.body)
-    trig_layer = nlayers - (model.n_resblocks // 2 + 1)
+    trig_layer = nlayers - (model.n_resblocks // 2 + 2)
     for lid,layer in enumerate(model.body):
         mod = layer(mod)
         if lid == trig_layer: break
