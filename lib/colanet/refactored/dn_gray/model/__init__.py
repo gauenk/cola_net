@@ -66,8 +66,8 @@ def augment_img(img, mode=0):
     elif mode == 7:
         return np.flipud(np.rot90(img, k=3))
 
-def test_x8(model, L, coords):
-    E_list = [model(augment_img_tensor(L, mode=i),coords) for i in range(8)]
+def test_x8(model, L, region):
+    E_list = [model(augment_img_tensor(L, mode=i),region) for i in range(8)]
     for i in range(len(E_list)):
         if i == 3 or i == 5:
             E_list[i] = augment_img_tensor(E_list[i], mode=8 - i)
@@ -104,6 +104,8 @@ class Model(nn.Module):
         self.precision = args.precision
         self.cpu = args.cpu
         self.n_GPUs = args.n_GPUs
+        self.ensemble = False
+        self.idx_scale = 0
 
         self.save_models = args.save_models
 
@@ -133,50 +135,54 @@ class Model(nn.Module):
         if args.print_model:
             print(self.model)
 
-    def forward(self, x, idx_scale=0,ensemble=False,coords=None):
+    def forward(self, x, idx_scale=0,ensemble=False,region=None,flows=None):
         self.ensemble = ensemble
         self.idx_scale = idx_scale
         # if self.ensemble:
-        #     return test_x8(self.model, x, coords)
+        #     return test_x8(self.model, x, region)
         # else:
-        #     return self.model(x)#, coords)
+        #     return self.model(x)#, region)
 
         target = self.get_model()
         if hasattr(target, 'set_scale'):
             target.set_scale(idx_scale)
         elif self.chop and not self.training:
             with torch.no_grad():  # this can save much memory
-                Out = self.forward_chop(x,coords)
+                Out = self.forward_chop(x,region=region,flows=flows)
             return Out
         else:
-            return self.model(x,coords)
+            return self.model(x,region,flows)
 
-    def my_fwd(self, x, ensemble=False):
+    def my_fwd(self, x, ensemble=False,flows=None):
         # return self.model(x)
         gpu_mem.reset_peak_gpu_stats()
-        coords_l = self.get_coords_list(x.shape,128)
+        region_l = self.get_region_list(x.shape,128)
         y = th.zeros_like(x)
-        for coords in coords_l:
-            top,left,btm,right = coords
-            yi = self.model(x,coords)
-            # yi = self.model(x,None)#coords)
+        for region in region_l:
+            if len(region) == 4:
+                top,left,btm,right = region
+            elif len(region) == 6:
+                top,left,btm,right = region[2:]
+            else: assert len(region) in [4,6]
+            yi = self.model(x,region)
+            # yi = self.model(x,None)#region)
             zi = yi[...,top:btm,left:right]
             y[...,top:btm,left:right] = y[...,top:btm,left:right] + zi
         gpu_mem.print_peak_gpu_stats(True,"my_fwd",reset=True)
         return y
 
-    def get_coords_list(self,vshape,bsize):
+    def get_region_list(self,vshape,bsize):
         t,c,h,w = vshape
-        coords_l = []
+        region_l = []
         n_h = (h-1) // bsize + 1
         n_w = (w-1) // bsize + 1
         for hb in range(n_h):
             for wb in range(n_w):
                 h_start,h_end = hb*bsize,(hb+1)*bsize
                 w_start,w_end = wb*bsize,(wb+1)*bsize
-                coords = [h_start,w_start,h_end,w_end]
-                coords_l.append(coords)
-        return coords_l
+                region = [h_start,w_start,h_end,w_end]
+                region_l.append(region)
+        return region_l
 
     def get_model(self):
         if self.n_GPUs == 1:
@@ -230,7 +236,7 @@ class Model(nn.Module):
                 strict=False
             )
 
-    def forward_chop(self, x, coords=None, shave=10, min_size=10000):
+    def forward_chop(self, x, region=None, shave=10, min_size=10000, flows=None):
         scale = self.scale[self.idx_scale]
         n_GPUs = min(self.n_GPUs, 4)
         b, c, h, w = x.size()
@@ -261,13 +267,14 @@ class Model(nn.Module):
                 lr_batch = torch.cat(lr_list[i:(i + n_GPUs)], dim=0)
                 # print("lr_batch.shape: ",lr_batch.shape)
                 if self.ensemble == False:
-                    sr_batch = self.model(lr_batch,coords)
+                    sr_batch = self.model(lr_batch,region=region,flows=flows)
                 else:
-                    sr_batch = test_x8(self.model, lr_batch, coords)
+                    sr_batch = test_x8(self.model, lr_batch, region)
                 sr_list.extend(sr_batch.chunk(n_GPUs, dim=0))
         else:
             sr_list = [
-                self.forward_chop(patch, coords=coords, shave=shave, min_size=min_size) \
+                self.forward_chop(patch, region=region,
+                                  shave=shave, min_size=min_size, flows=flows) \
                 for patch in lr_list
             ]
 

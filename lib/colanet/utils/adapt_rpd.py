@@ -128,6 +128,18 @@ class RegionProposalData():
         return point
 
     def sample_sobel_point(self):
+        sobel_vid = self.sobels[-1]
+        t,c,h,w = sobel_vid.shape
+        sobel_vid = th.mean(sobel_vid,1)
+        hw = h * w
+        ind = int(th.multinomial(sobel_vid.ravel(),1).item())
+        ti = ind // hw
+        hi = (ind%hw)//h
+        wi = (ind%hw)%w
+        point = [ti,hi,wi]
+        return point
+
+    def sample_rand_point(self):
         # print("self.sobel.shape: ",self.sobels[-1].shape)
         t,c,h,w = self.sobels[-1].shape
         size = th.Tensor([t*h*w])

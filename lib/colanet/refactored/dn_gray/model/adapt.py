@@ -57,7 +57,7 @@ def run_internal_adapt(self,_noisy,sigma,srch_img=None,flows=None,ws=29,wt=0,
     for astep in range(nadapts):
         with th.no_grad():
             batch_size_no_grad = 390*39
-            clean_raw = self(noisy,ensemble=ensemble)
+            clean_raw = self(noisy,ensemble=ensemble,flows=flows)
             # clean_raw = self(noisy,sigma,_srch_img,flows=flows,rescale=False,
             #              ws=ws,wt=wt,batch_size=batch_size_no_grad)
         clean = clean_raw.detach().clamp(0., 1.)
@@ -168,7 +168,7 @@ def adapt_step(nl_denoiser, clean, srch_img, flows, opt,
 
             # -- forward pass --
             optim.zero_grad()
-            image_dn = nl_denoiser(noisy_r,ensemble=ensemble)
+            image_dn = nl_denoiser(noisy_r,ensemble=ensemble,flows=flows)
             # image_dn = nl_denoiser(noisy_i,opt.sigma,srch_img=None,flows=flows,
             #                        ws=ws,wt=wt,train=True,rescale=False,
             #                        batch_size=batch_size,region=region)
@@ -194,7 +194,7 @@ def adapt_step(nl_denoiser, clean, srch_img, flows, opt,
                 with th.no_grad():
                     batch_size_te = 390*100
                     if not(noisy_gt is None):
-                        deno_gt =nl_denoiser(noisy_gt,ensemble=ensemble)
+                        deno_gt =nl_denoiser(noisy_gt,ensemble=ensemble,flows=flows)
                         # deno_gt =nl_denoiser(noisy_gt,opt.sigma,srch_img=None,flows=flows,
                         #                       ws=ws,wt=wt,train=False,rescale=False,
                         #                       batch_size=batch_size_te,region=region_gt)
@@ -214,7 +214,7 @@ def adapt_step(nl_denoiser, clean, srch_img, flows, opt,
                 th.cuda.empty_cache()
                 batch_size_te = 390*100
                 with th.no_grad():
-                    deno = nl_denoiser(noisy,ensemble=ensemble)
+                    deno = nl_denoiser(noisy,ensemble=ensemble,flows=flows)
                     # deno = nl_denoiser(noisy,opt.sigma,srch_img.clone(),flows,
                     #                    rescale=False,ws=ws,wt=wt,
                     #                    batch_size=batch_size_te)
@@ -234,7 +234,7 @@ def adapt_step(nl_denoiser, clean, srch_img, flows, opt,
 
 def eval_nl(nl_denoiser,noisy,clean,srch_img,flows,sigma,ws=29,wt=0,
             ensemble=False,verbose=True):
-    deno = nl_denoiser(noisy,ensemble=True)
+    deno = nl_denoiser(noisy,ensemble=ensemble,flows=flows)
     # deno = nl_denoiser(noisy,sigma,srch_img.clone(),flows=flows,
     #                    rescale=False,ws=ws,wt=wt)
     deno = deno.detach().clamp(-1, 1)
@@ -260,7 +260,7 @@ def sigma_255_to_torch(sigma_255):
     return sigma_255 / 255
 
 def append_adapts_cfg(cfg):
-    cfg.lr = 1e-3
+    cfg.lr = 5e-4
     cfg.epochs_between_check = 1
     cfg.block_w = 0
     cfg.dset_stride = 1

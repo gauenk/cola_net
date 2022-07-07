@@ -4,10 +4,12 @@ try:
 except:
     import model.common as common
     from model.merge_unit import merge_block
-import torch.nn as nn
+
 import torch
 import math
+import torch.nn as nn
 import torch.nn.functional as F
+from colanet.utils.misc import rslice
 
 class RR(nn.Module):
     def __init__(self, args, conv=common.default_conv):
@@ -99,13 +101,20 @@ class RR(nn.Module):
         self.body = nn.Sequential(*m_body)
         self.tail = nn.Sequential(*m_tail)
 
-    def forward(self, x, coords=None):
+    def forward(self, x, region=None, flows=None):
+        # Note: "region" is unused in all of the code base.
         # print(x.shape)
         res = x
         for name, module in self._modules.items():
             if name == "add_mean": continue
-            if name == "body.8": res = module(res,coords)
-            else: res = module(res)
+            if name == "body":
+                for name,layer in module.named_children():
+                    if int(name) == 8:
+                        res = layer(res,region,flows)
+                    else:
+                        res = layer(res)
+            else:
+                res = module(res)
         return x+res
 
     def load_state_dict(self, state_dict, strict=True):
@@ -153,14 +162,11 @@ class CES(nn.Module):
         # self.ca_forward_type = "dnls"
         self.ca_forward_type = "dnls_k"
 
-    def forward(self, x, coords=None):
-        # print("[ces] x.shape: ",x.shape)
-
-        out = self.c1(x,coords,self.ca_forward_type)
+    def forward(self, x, region=None, flows=None):
+        out = self.c1(x,region,self.ca_forward_type,flows)
         out = self.RBS1(out)
-        out = self.c2(out,coords,self.ca_forward_type)
+        out = self.c2(out,region,self.ca_forward_type,flows)
         out = self.RBS2(out)
-        out = self.c3(out,coords,self.ca_forward_type)
-
+        out = self.c3(out,region,self.ca_forward_type,flows)
         # print("[ces] out.shape: ",out.shape)
         return out

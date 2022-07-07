@@ -7,6 +7,7 @@ from torch.autograd import gradcheck
 from einops import rearrange,repeat
 from colanet.utils.misc import assert_nonan
 import colanet
+from colanet.utils.misc import optional
 
 """
 fundamental functions
@@ -30,7 +31,7 @@ def same_padding(images, ksizes, strides, rates):
     return images, paddings
 
 
-def extract_image_patches(images, ksizes, strides, rates, padding='same', coords=None):
+def extract_image_patches(images, ksizes, strides, rates, padding='same', region=None):
     """
     Extract patches from images and put them in the C output dimension.
     :param padding:
@@ -58,6 +59,7 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same', coords
     ksize = ksizes[0]
     adj = (ksize//2) - paddings[0]
     stride = strides[0]
+    coords = [0,0,h,w] if region is None else region[2:]
     unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,
                                   adj=adj,only_full=False,border="zero")
     patches = unfold(images)
@@ -115,11 +117,13 @@ class ContextualAttention_Enhance(nn.Module):
         self.phi = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
                              padding=0)
 
-    def dnls_k_forward(self, b, coords=None):
+    def dnls_k_forward(self, b, region=None, flows=None):
+
         # -- get images --
         b1 = self.g(b)
         b2 = self.theta(b)
         b3 = self.phi(b)
+        region = None
 
         # -- unpack parameters --
         t,c,h,w = b1.shape
@@ -131,19 +135,19 @@ class ContextualAttention_Enhance(nn.Module):
         chnls = b2.shape[1]
         dil,adj = 1,0
         ws,pt,wt = -1,1,0
-        coords = [0,0,h,w] if coords is None else coords
+        region = [0,0,h,w] if region is None else region
         device = b.device
         k = 100#int(64*64 * .1)
 
         # -- get search size --
-        cr_h = coords[2] - coords[0]
-        cr_w = coords[3] - coords[1]
+        cr_h = region[2] - region[0]
+        cr_w = region[3] - region[1]
 
         # -- batching params --
         nh = (cr_h-1)//stride0+1
         nw = (cr_w-1)//stride0+1
         ntotal = t * nh * nw
-        nbatch = ntotal//(t*16)
+        nbatch = ntotal//(t*2)
         nbatches = (ntotal-1) // nbatch + 1
         use_k = True
         # print(nbatch)
@@ -153,16 +157,19 @@ class ContextualAttention_Enhance(nn.Module):
 
         # -- define functions --
         exact = False
-        ifold = dnls.ifold.iFold(vshape,coords,stride=stride0,dilation=dil,
-                                 adj=0,only_full=False,use_reflect=False)
-        wfold = dnls.ifold.iFold(vshape,coords,stride=stride0,dilation=dil,
-                                 adj=0,only_full=False,use_reflect=False)
-        scatter = dnls.scatter.ScatterNl(ps,pt,exact=exact,device=device,
-                                         adj=0,use_bounds=False)
-        iunfold = dnls.iunfold.iUnfold(ps,coords,stride=stride1,dilation=dil,
+        ifold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
+                                 adj=0,only_full=False,use_reflect=False,
+                                 device=device)
+        wfold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
+                                 adj=0,only_full=False,use_reflect=False,
+                                 device=device)
+        scatter = dnls.scatter.ScatterNl(ps,pt,exact=exact,adj=0,use_bounds=False)
+        iunfold = dnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,
                                        adj=0,only_full=False,border="zero")
         ws,wt = 10,2
-        xsearch = dnls.xsearch.CrossSearchNl(None, None, k, ps, pt, ws, wt,
+        fflow = optional(flows,'fflow',None)
+        bflow = optional(flows,'bflow',None)
+        xsearch = dnls.xsearch.CrossSearchNl(fflow, bflow, k, ps, pt, ws, wt,
                                              oh0, ow0, oh1, ow1, chnls=chnls,
                                              dilation=dil,stride=stride1,
                                              use_bound=False,use_k=use_k,
@@ -211,7 +218,7 @@ class ContextualAttention_Enhance(nn.Module):
 
             # -- get patches --
             iqueries = dnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride0,
-                                                        coords,t,device)
+                                                        region,t,device=device)
             th.cuda.synchronize()
 
             # -- search --
@@ -291,7 +298,7 @@ class ContextualAttention_Enhance(nn.Module):
             ifold(_zi,qindex)
             wfold(ones,qindex)
             # th.cuda.synchronize()
-            # timer.stop("fold")
+            timer.stop("fold")
             # print(timer)
 
         # -- get post-attn vid --
@@ -322,7 +329,7 @@ class ContextualAttention_Enhance(nn.Module):
 
         return y
 
-    def dnls_forward(self, b, coords=None):
+    def dnls_forward(self, b, region=None, flows=None):
 
         # -- get images --
         b1 = self.g(b)
@@ -339,12 +346,12 @@ class ContextualAttention_Enhance(nn.Module):
         chnls = b2.shape[1]
         dil,adj = 1,0
         ws,pt,wt = -1,1,0
-        coords = [0,0,h,w] if coords is None else coords
+        region = [0,0,h,w] if region is None else region
         device = b.device
 
         # -- get search size --
-        cr_h = coords[2] - coords[0]
-        cr_w = coords[3] - coords[1]
+        cr_h = region[2] - region[0]
+        cr_w = region[3] - region[1]
 
         # -- batching params --
         nh = (cr_h-1)//stride0+1
@@ -359,14 +366,16 @@ class ContextualAttention_Enhance(nn.Module):
         oh0,ow0,oh1,ow1 = 1,1,3,3
 
         # -- define functions --
-        ifold = dnls.ifold.iFold(vshape,coords,stride=stride0,dilation=dil,
+        ifold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
                                  adj=0,only_full=False,use_reflect=False)
-        wfold = dnls.ifold.iFold(vshape,coords,stride=stride0,dilation=dil,
+        wfold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
                                  adj=0,only_full=False,use_reflect=False)
-        iunfold = dnls.iunfold.iUnfold(ps,coords,stride=stride1,dilation=dil,
+        iunfold = dnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,
                                        adj=adj,only_full=False,border="zero")
-        # iunfold = dnls.iunfold.iUnfold(ps,coords,stride=stride1,dilation=dil,adj=True)
-        xsearch = dnls.xsearch.CrossSearchNl(None, None, -1, ps, pt, ws, wt,
+        # iunfold = dnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,adj=True)
+        fflow = optional(flows,'fflow',None)
+        bflow = optional(flows,'bflow',None)
+        xsearch = dnls.xsearch.CrossSearchNl(fflow, bflow, -1, ps, pt, ws, wt,
                                              oh0, ow0, oh1, ow1,
                                              chnls=chnls,dilation=dil,stride=stride1,
                                              use_bound=False,use_k=False,exact=False)
@@ -403,7 +412,7 @@ class ContextualAttention_Enhance(nn.Module):
 
             # -- get patches --
             iqueries = dnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride0,
-                                                        coords,t,device)
+                                                        region,t,device)
             th.cuda.synchronize()
 
             # -- search --
@@ -525,7 +534,7 @@ class ContextualAttention_Enhance(nn.Module):
         # # -- compute cross-scale search inplace --
         # # fold,wfold = dnls.ifold.iFold(),dnls.ifold.iFold()
         # fold,unfold = th.nn.functional.fold,th.nn.functional.unfold
-        # # unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,adj=True)
+        # # unfold = dnls.iunfold.iUnfold(ksize,region,stride=stride,dilation=1,adj=True)
         # scatter = dnls.scatter_nl(scale=1)
         # dnls_search = dnls.xsearch.CrossScaleSearch(flows.fflow, flows.bflow, k, ps, pt,
         #                                             ws, wt, chnls=chnls,dilation=1, stride=1)
@@ -540,22 +549,22 @@ class ContextualAttention_Enhance(nn.Module):
         # y.append(zi)
 
 
-    def forward(self, b, coords=None):
+    def forward(self, b, region=None, flows=None):
 
         kernel = self.ksize
-        coords = None
+        region = None
 
         b1 = self.g(b)
         b2 = self.theta(b)
         b3 = self.phi(b)
 
         raw_int_bs = list(b1.size())  # b*c*h*w
-        coords = coords
+        region = region
 
         patch_28, paddings_28 = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
                                                       strides=[self.stride_1, self.stride_1],
                                                       rates=[1, 1],
-                                                      padding='same',coords=coords)
+                                                      padding='same',region=region)
         # print("patch_28.shape: ",patch_28.shape)
         patch_28 = patch_28.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_28 = patch_28.permute(0, 4, 1, 2, 3)
@@ -564,7 +573,7 @@ class ContextualAttention_Enhance(nn.Module):
         patch_112, paddings_112 = extract_image_patches(b2, ksizes=[self.ksize, self.ksize],
                                                         strides=[self.stride_2, self.stride_2],
                                                         rates=[1, 1],
-                                                        padding='same',coords=coords)
+                                                        padding='same',region=region)
         # print("patch_112.shape: ",patch_112.shape)
 
 
@@ -575,7 +584,7 @@ class ContextualAttention_Enhance(nn.Module):
         patch_112_2, paddings_112_2 = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
                                                         strides=[self.stride_2, self.stride_2],
                                                         rates=[1, 1],
-                                                        padding='same',coords=None)
+                                                        padding='same',region=None)
 
 
         patch_112_2 = patch_112_2.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)

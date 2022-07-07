@@ -59,7 +59,9 @@ def run_exp(cfg):
     loader = iter(loaders.te)
 
     # -- network --
-    model = get_model(cfg.model_name,cfg.sigma,cfg.device)
+    mtype = "gray"
+    model = colanet.refactored.load_model(mtype,cfg.sigma).eval()
+    # model = get_model(cfg.model_name,cfg.sigma,cfg.device)
     model.eval()
 
     # -- for each batch --
