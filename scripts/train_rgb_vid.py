@@ -34,6 +34,7 @@ from colanet.utils.misc import rslice,write_pickle,read_pickle
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning import Callback
+from pytorch_lightning.loggers import CSVLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.utilities.distributed import rank_zero_only
 
@@ -109,7 +110,6 @@ class ColaNetLit(pl.LightningModule):
         # -- denoise --
         noisy,clean = batch['noisy'][0]/255.,batch['clean'][0]/255.
         region = batch['region'][0]
-        # print(region)
         noisy = rslice(noisy,region)
         clean = rslice(clean,region)
 
@@ -128,9 +128,8 @@ class ColaNetLit(pl.LightningModule):
     def test_step(self, batch, batch_nb):
 
         # -- denoise --
-        index = batch['index'][0]
+        index,region = batch['index'][0],batch['region'][0]
         noisy,clean = batch['noisy'][0]/255.,batch['clean'][0]/255.
-        region = batch['region'][0]
         noisy = rslice(noisy,region)
         clean = rslice(clean,region)
 
@@ -207,35 +206,49 @@ def launch_training(cfg):
 
     # -=-=-=-=-=-=-=-=-
     #
-    #     Training
+    #     Init Exp
     #
     # -=-=-=-=-=-=-=-=-
+
+    # -- create timer --
+    timer = ExpTimer()
+
+    # -- init log dir --
+    log_dir = Path(cfg.log_root) / str(cfg.uuid)
+    if not log_dir.exists():
+        log_dir.mkdir(parents=True)
+
+    # -- prepare save directory for pickles --
+    save_dir = Path("./output/training/") / cfg.uuid
+    if not save_dir.exists():
+        save_dir.mkdir(parents=True)
 
     # -- network --
     model = ColaNetLit(cfg.mtype,cfg.sigma,cfg.batch_size,
                        cfg.flow=="true",cfg.ensemble=="true",
                        cfg.ca_fwd,cfg.isize)
 
-    # -- create timer --
-    timer = ExpTimer()
-
     # -- load dataset with testing mods isizes --
     model.isize = None
     cfg_clone = copy.deepcopy(cfg)
     cfg_clone.isize = None
-    cfg_clone.nsamples = cfg.nsamples_at_testing
+    cfg_clone.nsamples_val = cfg.nsamples_at_testing
     data,loaders = data_hub.sets.load(cfg_clone)
 
-    # -- validation performance --
-    timer.start("init_val_te")
+    # -- init validation performance --
     init_val_report = MetricsCallback()
+    logger = CSVLogger(log_dir,name="init_val_te",flush_logs_every_n_steps=5)
     trainer = pl.Trainer(gpus=1,precision=32,limit_train_batches=1.,
-                         max_epochs=3,log_every_n_steps=1,callbacks=[init_val_report])
+                         max_epochs=3,log_every_n_steps=1,
+                         callbacks=[init_val_report],logger=logger)
+    timer.start("init_val_te")
     trainer.test(model, loaders.val)
-    init_val_results = val_report.metrics
+    timer.stop("init_val_te")
+    init_val_results = init_val_report.metrics
+    print("--- Init Validation Results ---")
+    print(init_val_results)
     init_val_res_fn = save_dir / "init_val.pkl"
     write_pickle(init_val_res_fn,init_val_results)
-    timer.stop("init_val_te")
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     #
@@ -250,16 +263,17 @@ def launch_training(cfg):
     data,loaders = data_hub.sets.load(cfg)
 
     # -- pytorch_lightning training --
-    chkpt_fn = cfg.uuid + "-{epoch:02d}-{val_loss:.2f}"
+    logger = CSVLogger(log_dir,name="train",flush_logs_every_n_steps=5)
+    chkpt_fn = cfg.uuid + "-{epoch:02d}-{val_loss:2.2e}"
     checkpoint_callback = ModelCheckpoint(monitor="val_loss",save_top_k=3,mode="max",
                                           dirpath=cfg.checkpoint_dir,filename=chkpt_fn)
-    timer.start("train")
     trainer = pl.Trainer(gpus=2,precision=32,limit_train_batches=1.,
                          max_epochs=cfg.nepochs,log_every_n_steps=1,
-                         callbacks=[checkpoint_callback])
+                         callbacks=[checkpoint_callback],logger=logger)
+    timer.start("train")
     trainer.fit(model, loaders.tr, loaders.val)
     timer.stop("train")
-    best_path = checkpoint_callback.best_model_path
+    best_model_path = checkpoint_callback.best_model_path
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     #
@@ -271,45 +285,48 @@ def launch_training(cfg):
     model.isize = None
     cfg_clone = copy.deepcopy(cfg)
     cfg_clone.isize = None
-    cfg_clone.nsamples = cfg.nsamples_at_testing
+    cfg_clone.nsamples_val = cfg.nsamples_at_testing
     data,loaders = data_hub.sets.load(cfg_clone)
 
-    # -- prepare save directory --
-    save_dir = Path("./output/training/") / cfg.uuid
-    if not save_dir.exists():
-        save_dir.mkdir(parents=True)
-
     # -- training performance --
-    timer.start("train_te")
     tr_report = MetricsCallback()
+    logger = CSVLogger(log_dir,name="train_te",flush_logs_every_n_steps=5)
     trainer = pl.Trainer(gpus=1,precision=32,limit_train_batches=1.,
-                         max_epochs=3,log_every_n_steps=1,callbacks=[tr_report])
+                         max_epochs=1,log_every_n_steps=1,
+                         callbacks=[tr_report],logger=logger)
+    timer.start("train_te")
     trainer.test(model, loaders.tr)
+    timer.stop("train_te")
     tr_results = tr_report.metrics
     tr_res_fn = save_dir / "train.pkl"
     write_pickle(tr_res_fn,tr_results)
-    timer.stop("train_te")
 
     # -- validation performance --
-    timer.start("val_te")
     val_report = MetricsCallback()
+    logger = CSVLogger(log_dir,name="val_te",flush_logs_every_n_steps=5)
     trainer = pl.Trainer(gpus=1,precision=32,limit_train_batches=1.,
-                         max_epochs=3,log_every_n_steps=1,callbacks=[val_report])
+                         max_epochs=1,log_every_n_steps=1,
+                         callbacks=[val_report],logger=logger)
+    timer.start("val_te")
     trainer.test(model, loaders.val)
+    timer.stop("val_te")
     val_results = val_report.metrics
+    print("--- Tuned Validation Results ---")
+    print(val_results)
     val_res_fn = save_dir / "val.pkl"
     write_pickle(val_res_fn,val_results)
-    timer.stop("val_te")
 
     # -- report --
     results = edict()
-    results.best_path = best_path
-    results.train_results_fn = tr_res_fn
+    results.best_model_path = best_model_path
     results.init_val_results_fn = init_val_res_fn
+    results.train_results_fn = tr_res_fn
     results.val_results_fn = val_res_fn
     results.train_time = timer["train"]
     results.test_train_time = timer["train_te"]
     results.test_val_time = timer["val_te"]
+    results.test_init_val_time = timer["init_val_te"]
+
     return results
 
 def default_cfg():
@@ -333,6 +350,7 @@ def default_cfg():
     cfg.index_skip_val = 5
     cfg.nepochs = 5
     cfg.ensemble = "false"
+    cfg.log_root = "./output/log"
     return cfg
 
 def test_tuned_models(cfg):

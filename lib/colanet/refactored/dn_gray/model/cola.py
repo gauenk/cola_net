@@ -21,10 +21,10 @@ def weights_init_kaiming(m):
 
 def make_model(args):
     if args.mode == 'E':
-        print('COLA-E')
+        # print('COLA-E')
         return RR(args)
     elif args.mode == 'B':
-        print('COLA-B')
+        # print('COLA-B')
         net = MergeNet(in_channels=1,intermediate_channels=64,vector_length=32,
                        use_multiple_size=True,dncnn_depth=6,num_merge_block=4,use_topk=False
                       )

@@ -117,7 +117,7 @@ class ContextualAttention_Enhance(nn.Module):
         self.phi = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
                              padding=0)
 
-    def dnls_k_forward(self, b, region=None, flows=None):
+    def dnls_k_forward(self, b, region=None, flows=None, exact=False):
 
         # -- get images --
         b1 = self.g(b)
@@ -156,7 +156,6 @@ class ContextualAttention_Enhance(nn.Module):
         oh0,ow0,oh1,ow1 = 1,1,3,3
 
         # -- define functions --
-        exact = False
         ifold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
                                  adj=0,only_full=False,use_reflect=False,
                                  device=device)
@@ -329,7 +328,7 @@ class ContextualAttention_Enhance(nn.Module):
 
         return y
 
-    def dnls_forward(self, b, region=None, flows=None):
+    def dnls_forward(self, b, region=None, flows=None, exact=False):
 
         # -- get images --
         b1 = self.g(b)
@@ -378,7 +377,7 @@ class ContextualAttention_Enhance(nn.Module):
         xsearch = dnls.xsearch.CrossSearchNl(fflow, bflow, -1, ps, pt, ws, wt,
                                              oh0, ow0, oh1, ow1,
                                              chnls=chnls,dilation=dil,stride=stride1,
-                                             use_bound=False,use_k=False,exact=False)
+                                             use_bound=False,use_k=False,exact=exact)
         # -- unfold patches --
         # patches = th.nn.functional.unfold(b2,(ps,ps))#,0,-1)
         # b1_ones = th.ones_like(b1)
@@ -549,7 +548,7 @@ class ContextualAttention_Enhance(nn.Module):
         # y.append(zi)
 
 
-    def forward(self, b, region=None, flows=None):
+    def forward(self, b, region=None, flows=None, exact=False):
 
         kernel = self.ksize
         region = None

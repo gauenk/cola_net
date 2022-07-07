@@ -19,14 +19,15 @@ class merge_block(nn.Module):
         self.att_SK = nn.Linear(in_features=vector_length,out_features=out_channels)
         self.softmax = nn.Softmax(dim=1)
 
-    def forward(self, x, region=None, ca_forward_type="forward", flows=None):
+    def forward(self, x, region=None, ca_forward_type="forward",
+                flows=None, exact=False):
         out1 = self.SKUnit(x)[:,None]
         if ca_forward_type in ["forward","default"]:
-            out2 = self.CAUnit(x,region,flows)[:,None]
+            out2 = self.CAUnit(x,region,flows,exact)[:,None]
         elif ca_forward_type == "dnls":
-            out2 = self.CAUnit.dnls_forward(x,region,flows)[:,None]
+            out2 = self.CAUnit.dnls_forward(x,region,flows,exact)[:,None]
         elif ca_forward_type == "dnls_k":
-            out2 = self.CAUnit.dnls_k_forward(x,region,flows)[:,None]
+            out2 = self.CAUnit.dnls_k_forward(x,region,flows,exact)[:,None]
         else:
             raise ValueError(f"Uknown CrossAttn forward type [{ca_forward_type}]")
         out = torch.cat((out2,out1),dim=1)
