@@ -275,6 +275,7 @@ def launch_training(cfg):
     timer.stop("train")
     best_model_path = checkpoint_callback.best_model_path
 
+
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     #
     #       Validation Testing
@@ -285,6 +286,7 @@ def launch_training(cfg):
     model.isize = None
     cfg_clone = copy.deepcopy(cfg)
     cfg_clone.isize = None
+    cfg_clone.nsamples_tr = cfg.nsamples_at_testing
     cfg_clone.nsamples_val = cfg.nsamples_at_testing
     data,loaders = data_hub.sets.load(cfg_clone)
 
@@ -372,7 +374,6 @@ def main():
     ws,wt = [10],[5]
     sigmas = [50.]#,30.,10.]
     isizes = ["96_96"]
-    # ca_fwd_list = ["default","dnls_k"]
     ca_fwd_list = ["dnls_k","default"]
     exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"isize":isizes,
                  "ca_fwd":ca_fwd_list}
@@ -406,20 +407,30 @@ def main():
     records = cache.load_flat_records(exps)
     print(records.columns)
     print(records['uuid'])
-    print(records['checkpoint_dir'].iloc[0])
-    print(records['checkpoint_dir'].iloc[1])
-    print(records['best_path'].iloc[0])
-    print(records['best_path'].iloc[1])
+    print(records['best_model_path'].iloc[0])
+    print(records['best_model_path'].iloc[1])
 
     # -- load res --
     uuids = list(records['uuid'].to_numpy())
     cas = list(records['ca_fwd'].to_numpy())
+    fns = list(records['init_val_results_fn'].to_numpy())
+    res_a = read_pickle(fns[0])
+    res_b = read_pickle(fns[1])
+    print(uuids,cas,fns)
+    print(res_a['test_psnr'])
+    print(res_a['test_index'])
+    print(res_b['test_psnr'])
+    print(res_b['test_index'])
+
     fns = list(records['val_results_fn'].to_numpy())
     res_a = read_pickle(fns[0])
     res_b = read_pickle(fns[1])
     print(uuids,cas,fns)
     print(res_a['test_psnr'])
+    print(res_a['test_index'])
     print(res_b['test_psnr'])
+    print(res_b['test_index'])
+
 
 
 # def find_records(path,uuid):

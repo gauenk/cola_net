@@ -17,6 +17,7 @@ import torch as th
 from einops import rearrange,repeat
 
 # -- data mngmnt --
+import pandas as pd
 from pathlib import Path
 from easydict import EasyDict as edict
 
@@ -96,48 +97,58 @@ def run_experiment(cfg):
     # -- network --
     model = WrapColaNet(cfg.mtype,cfg.sigma,
                         cfg.flow=="true",cfg.ensemble=="true",
-                        cfg.ca_fwd,cfg.isize,cfg.exact == "true")
+                        cfg.ca_fwd,cfg.isize,False)
     model = model.to(cfg.device)
 
     # -- load data --
     data,loaders = data_hub.sets.load(cfg)
     sample = data.val[0]
     index,region = sample['index'].item(),sample['region']
-    noisy = rslice(sample['noisy'].to(cfg.device),region)
-    clean = rslice(sample['clean'].to(cfg.device),region)
+    noisy = rslice(sample['noisy'].to(cfg.device),region)/255.
+    clean = rslice(sample['clean'].to(cfg.device),region)/255.
 
     # -- set autograd --
     model.eval()
     noisy.requires_grad_(True)
 
-    # -- forward --
-    deno = model(noisy)
-
-    # -- backward --
-    loss = th.mean((deno - clean)**2)
-    loss.backward()
-
-    # -- psnr reference --
-    psnr = np.mean(compute_psnrs(deno,clean,div=1.))
-
-    # -- grad --
-    grad = noisy.grad
-
-    # -- save grad to dir --
-    grad_root = Path("./output/bwd_error_map/grads/")
-    path = "exact" if cfg.exact == "true" else "not_exact"
-    file_stem = "%d_%d.pt" % (cfg.seed,cfg.rep_id)
-    grad_dir = grad_root / path
-    if not grad_dir.exists(): grad_dir.mkdir(parents=True)
-    grad_fn = str(grad_dir / file_stem)
-    th.save(grad.cpu(),grad_fn)
-
-    # -- results --
+    # -- run both --
     results = edict()
-    results.grad = grad_fn
-    results.loss = loss.item()
-    results.psnr = psnr.item()
+    for use_exact in [True,False]:
+
+        # -- set exact --
+        model.exact = use_exact
+
+        # -- forward --
+        deno = model(noisy)
+
+        # -- backward --
+        loss = th.mean((deno - clean)**2)
+        loss.backward()
+
+        # -- psnr reference --
+        psnr = np.mean(compute_psnrs(deno,clean,div=1.))
+
+        # -- grad --
+        grad = noisy.grad
+
+        # -- modding string --
+        estr = "exact" if use_exact else "not_exact"
+
+        # -- save grad to dir --
+        grad_root = Path("./output/bwd_error_map/grads/")
+        file_stem = "%d_%d.pt" % (cfg.seed,cfg.rep_id)
+        grad_dir = grad_root / estr
+        if not grad_dir.exists(): grad_dir.mkdir(parents=True)
+        grad_fn = str(grad_dir / file_stem)
+        th.save(grad.cpu(),grad_fn)
+
+        # -- results --
+        results['%s_grad' % estr] = grad_fn
+        results['%s_loss' % estr] = loss.item()
+        results['%s_psnr' % estr] = psnr.item()
+
     results.vid_index = index
+    print(results.keys())
     return results
 
 def default_cfg():
@@ -183,7 +194,7 @@ def main():
     rep_ids = list(np.arange(3))
     seeds = list(np.arange(100))
     exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"isize":isizes,
-                 "ca_fwd":ca_fwd_list,"exact":exact,"seed":seeds,
+                 "ca_fwd":ca_fwd_list,"seed":seeds,
                  "rep_id":rep_ids}
     exps = cache_io.mesh_pydicts(exp_lists) # create mesh
     nexps = len(exps)
@@ -194,6 +205,7 @@ def main():
 
     # -- launch each experiment --
     for exp_num,exp in enumerate(exps):
+        break
 
         # -- info --
         if verbose:
@@ -212,11 +224,11 @@ def main():
             cache.save_exp(uuid,exp,results) # save to cache
 
     # -- results --
-    records = cache.load_flat_records(exps)
+    path = Path("./output/bwd_error_map/records.pkl")
+    records = cache.load_flat_records(exps,path)
     print(records)
 
     # -- compare to gt --
-    run_exp(
 
 
 if __name__ == "__main__":
