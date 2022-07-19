@@ -8,7 +8,7 @@ from easydict import EasyDict as edict
 from .model import Model
 from .misc import select_sigma,default_options
 
-def load_model(data_sigma,version=1):
+def load_model(data_sigma,version=1,chnls=1):
 
     # -- params --
     model_sigma = select_sigma(data_sigma)
@@ -16,6 +16,7 @@ def load_model(data_sigma,version=1):
     args.ensemble = False
     checkpoint = edict()
     checkpoint.dir = "."
+    args.n_colors = chnls
 
     # -- weights --
     weights = Path("/home/gauenk/Documents/packages/colanet/weights/checkpoints/")

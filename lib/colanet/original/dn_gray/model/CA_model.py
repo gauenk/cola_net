@@ -136,8 +136,8 @@ class ContextualAttention_Enhance(nn.Module):
             yi = score_map.view(b_s, l_s, -1)
             yi = F.softmax(yi*self.softmax_scale, dim=2).view(l_s, -1)
             pi = pi.view(h_s * w_s, -1)
-            # print("pi.shape: ",pi.shape)
             # print("yi.shape: ",yi.shape)
+            # yi = yi.detach()
             yi = torch.mm(yi, pi)
             # print("[post] yi.shape: ",yi.shape)
             yi = yi.view(b_s, l_s, c_s, k_s, k_s)[0]

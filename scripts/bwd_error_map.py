@@ -31,7 +31,7 @@ import svnlb
 import cache_io
 
 # -- network --
-import colanet
+import colanet.configs as configs
 import colanet.utils.gpu_mem as gpu_mem
 from colanet.utils.timer import ExpTimer
 from colanet.utils.metrics import compute_psnrs,compute_ssims
@@ -102,7 +102,7 @@ def run_experiment(cfg):
 
     # -- load data --
     data,loaders = data_hub.sets.load(cfg)
-    sample = data.val[0]
+    sample = data.val[cfg.sample_index]
     index,region = sample['index'].item(),sample['region']
     noisy = rslice(sample['noisy'].to(cfg.device),region)/255.
     clean = rslice(sample['clean'].to(cfg.device),region)/255.
@@ -136,7 +136,7 @@ def run_experiment(cfg):
 
         # -- save grad to dir --
         grad_root = Path("./output/bwd_error_map/grads/")
-        file_stem = "%d_%d.pt" % (cfg.seed,cfg.rep_id)
+        file_stem = "%d_%d_%d.pt" % (cfg.sample_index,cfg.seed,cfg.rep_id)
         grad_dir = grad_root / estr
         if not grad_dir.exists(): grad_dir.mkdir(parents=True)
         grad_fn = str(grad_dir / file_stem)
@@ -193,9 +193,10 @@ def main():
     ca_fwd_list = ["dnls_k"]
     rep_ids = list(np.arange(3))
     seeds = list(np.arange(100))
+    indices = list(np.linspace(0,30,6).astype(np.int))
     exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"isize":isizes,
                  "ca_fwd":ca_fwd_list,"seed":seeds,
-                 "rep_id":rep_ids}
+                 "rep_id":rep_ids,'sample_index':indices}
     exps = cache_io.mesh_pydicts(exp_lists) # create mesh
     nexps = len(exps)
 
@@ -205,7 +206,6 @@ def main():
 
     # -- launch each experiment --
     for exp_num,exp in enumerate(exps):
-        break
 
         # -- info --
         if verbose:
@@ -225,7 +225,7 @@ def main():
 
     # -- results --
     path = Path("./output/bwd_error_map/records.pkl")
-    records = cache.load_flat_records(exps,path)
+    records = cache.load_flat_records(exps,path,clear=True)
     print(records)
 
     # -- compare to gt --

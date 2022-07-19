@@ -105,16 +105,21 @@ class RR(nn.Module):
         # Note: "region" is unused in all of the code base.
         # print(x.shape)
         res = x
+        # print("a")
         for name, module in self._modules.items():
             if name == "add_mean": continue
             if name == "body":
-                for name,layer in module.named_children():
-                    if int(name) == 8:
+                for _name,layer in module.named_children():
+                    if int(_name) == 8:
                         res = layer(res,region,flows)
+                        # print("->",_name)
                     else:
                         res = layer(res)
+                        # print("-->",_name)
             else:
                 res = module(res)
+        #     print("--->",name)
+        # print("b")
         return x+res
 
     def load_state_dict(self, state_dict, strict=True):

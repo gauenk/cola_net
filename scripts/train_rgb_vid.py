@@ -1,5 +1,4 @@
 
-
 # -- misc --
 import os,math,tqdm
 import pprint,copy
@@ -25,182 +24,20 @@ import cache_io
 
 # -- network --
 import colanet
+import colanet.configs as configs
 import colanet.utils.gpu_mem as gpu_mem
 from colanet.utils.timer import ExpTimer
 from colanet.utils.metrics import compute_psnrs,compute_ssims
 from colanet.utils.misc import rslice,write_pickle,read_pickle
+from colanet.lightning import ColaNetLit,MetricsCallback
 
 # -- lightning module --
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning import Callback
 from pytorch_lightning.loggers import CSVLogger
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint,StochasticWeightAveraging
 from pytorch_lightning.utilities.distributed import rank_zero_only
-
-
-class ColaNetLit(pl.LightningModule):
-
-    def __init__(self,mtype,sigma,batch_size=1,flow=True,
-                 ensemble=False,ca_fwd="dnls_k",isize=None):
-        super().__init__()
-        self.mtype = mtype
-        self.sigma = sigma
-        self._model = [colanet.refactored.load_model(mtype,sigma)]
-        self.net = self._model[0].model
-        self.net.body[8].ca_forward_type = ca_fwd
-        self.batch_size = batch_size
-        self.flow = flow
-        self.isize = isize
-
-    def forward(self,vid):
-        flows = self._get_flow(vid)
-        if not(self.isize is None):
-            deno = self.net(vid,flows=flows,region=None)
-        else:
-            deno = self.forward_full(vid,flows)
-        deno = th.clamp(deno,0.,1.)
-        return deno
-
-    def forward_full(self,vid,flows):
-        model = self._model[0]
-        model.model = self.net
-        deno = model.forward_chop(vid,flows=flows)
-        return deno
-
-    def _get_flow(self,vid):
-        if self.flow == True:
-            noisy_np = vid.cpu().numpy()
-            if noisy_np.shape[1] == 1:
-                noisy_np = np.repeat(noisy_np,3,axis=1)
-            flows = svnlb.compute_flow(noisy_np,self.sigma)
-            flows = edict({k:th.from_numpy(v).to(self.device) for k,v in flows.items()})
-        else:
-            t,c,h,w = vid.shape
-            zflows = th.zeros((t,2,h,w)).to(self.device)
-            flows = edict()
-            flows.fflow,flows.bflow = zflows,zflows
-        return flows
-
-    def configure_optimizers(self):
-        optim = th.optim.Adam(self.parameters(),lr=5e-4)
-        return optim
-
-    def training_step(self, batch, batch_idx):
-
-        # -- get data --
-        noisy,clean = batch['noisy'][0]/255.,batch['clean'][0]/255.
-        region = batch['region'][0]
-        noisy = rslice(noisy,region)
-        clean = rslice(clean,region)
-
-        # -- foward --
-        deno = self.forward(noisy)
-
-        # -- report loss --
-        loss = th.mean((clean - deno)**2)
-        self.log("train_loss", loss.item(), on_step=True, on_epoch=False,
-                 batch_size=self.batch_size)
-
-        # -- update --
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-
-        # -- denoise --
-        noisy,clean = batch['noisy'][0]/255.,batch['clean'][0]/255.
-        region = batch['region'][0]
-        noisy = rslice(noisy,region)
-        clean = rslice(clean,region)
-
-        # -- forward --
-        gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
-        deno = self.forward(noisy)
-        mem_gb = gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
-
-        # -- loss --
-        loss = th.mean((clean - deno)**2)
-        self.log("val_loss", loss.item(), on_step=False,
-                 on_epoch=True,batch_size=1)
-        self.log("val_gpu_mem", mem_gb, on_step=False,
-                 on_epoch=True,batch_size=1)
-
-    def test_step(self, batch, batch_nb):
-
-        # -- denoise --
-        index,region = batch['index'][0],batch['region'][0]
-        noisy,clean = batch['noisy'][0]/255.,batch['clean'][0]/255.
-        noisy = rslice(noisy,region)
-        clean = rslice(clean,region)
-
-        # -- forward --
-        gpu_mem.print_peak_gpu_stats(False,"test",reset=True)
-        deno = self.forward(noisy)
-        mem_gb = gpu_mem.print_peak_gpu_stats(False,"test",reset=True)
-
-        # -- compare --
-        loss = th.mean((clean - deno)**2)
-        psnr = np.mean(compute_psnrs(deno,clean,div=1.)).item()
-        ssim = np.mean(compute_ssims(deno,clean,div=1.)).item()
-
-        # -- log --
-        results = edict()
-        results.test_loss = loss.item()
-        results.test_psnr = psnr
-        results.test_ssim = ssim
-        results.test_gpu_mem = mem_gb
-        results.test_index = index.cpu().numpy().item()
-        return results
-
-class MetricsCallback(Callback):
-    """PyTorch Lightning metric callback."""
-
-    def __init__(self):
-        super().__init__()
-        self.metrics = {}
-
-    def _accumulate_results(self,each_me):
-        for key,val in each_me.items():
-            if not(key in self.metrics):
-                self.metrics[key] = []
-            if hasattr(val,"ndim"):
-                ndim = val.ndim
-                val = val.cpu().numpy().item()
-            self.metrics[key].append(val)
-
-    @rank_zero_only
-    def log_metrics(self, metrics, step):
-        # metrics is a dictionary of metric names and values
-        # your code to record metrics goes here
-        print(metrics,step)
-
-    def on_train_epoch_end(self, trainer, pl_module):
-        each_me = copy.deepcopy(trainer.callback_metrics)
-        self._accumulate_results(each_me)
-
-    def on_validation_epoch_end(self, trainer, pl_module):
-        each_me = copy.deepcopy(trainer.callback_metrics)
-        self._accumulate_results(each_me)
-
-    def on_test_epoch_end(self, trainer, pl_module):
-        each_me = copy.deepcopy(trainer.callback_metrics)
-        self._accumulate_results(each_me)
-
-    def on_train_batch_end(self, trainer, pl_module, outs,
-                           batch, batch_idx, dl_idx):
-        each_me = copy.deepcopy(trainer.callback_metrics)
-        self._accumulate_results(each_me)
-
-
-    def on_validation_batch_end(self, trainer, pl_module, outs,
-                                batch, batch_idx, dl_idx):
-        each_me = copy.deepcopy(trainer.callback_metrics)
-        self._accumulate_results(each_me)
-
-    def on_test_batch_end(self, trainer, pl_module, outs,
-                          batch, batch_idx, dl_idx):
-        self._accumulate_results(outs)
-
 
 def launch_training(cfg):
 
@@ -226,7 +63,7 @@ def launch_training(cfg):
     # -- network --
     model = ColaNetLit(cfg.mtype,cfg.sigma,cfg.batch_size,
                        cfg.flow=="true",cfg.ensemble=="true",
-                       cfg.ca_fwd,cfg.isize)
+                       cfg.ca_fwd,cfg.isize,cfg.bw)
 
     # -- load dataset with testing mods isizes --
     model.isize = None
@@ -237,7 +74,7 @@ def launch_training(cfg):
 
     # -- init validation performance --
     init_val_report = MetricsCallback()
-    logger = CSVLogger(log_dir,name="init_val_te",flush_logs_every_n_steps=5)
+    logger = CSVLogger(log_dir,name="init_val_te",flush_logs_every_n_steps=1)
     trainer = pl.Trainer(gpus=1,precision=32,limit_train_batches=1.,
                          max_epochs=3,log_every_n_steps=1,
                          callbacks=[init_val_report],logger=logger)
@@ -261,15 +98,18 @@ def launch_training(cfg):
 
     # -- data --
     data,loaders = data_hub.sets.load(cfg)
+    print("Num Training Vids: ",len(data.tr))
 
     # -- pytorch_lightning training --
-    logger = CSVLogger(log_dir,name="train",flush_logs_every_n_steps=5)
+    logger = CSVLogger(log_dir,name="train",flush_logs_every_n_steps=1)
     chkpt_fn = cfg.uuid + "-{epoch:02d}-{val_loss:2.2e}"
     checkpoint_callback = ModelCheckpoint(monitor="val_loss",save_top_k=3,mode="max",
                                           dirpath=cfg.checkpoint_dir,filename=chkpt_fn)
+    swa_callback = StochasticWeightAveraging(swa_lrs=1e-2)
     trainer = pl.Trainer(gpus=2,precision=32,limit_train_batches=1.,
-                         max_epochs=cfg.nepochs,log_every_n_steps=1,
-                         callbacks=[checkpoint_callback],logger=logger)
+                         max_epochs=cfg.nepochs-1,log_every_n_steps=1,
+                         logger=logger,gradient_clip_val=0.5,
+                         callbacks=[checkpoint_callback,swa_callback])
     timer.start("train")
     trainer.fit(model, loaders.tr, loaders.val)
     timer.stop("train")
@@ -292,7 +132,7 @@ def launch_training(cfg):
 
     # -- training performance --
     tr_report = MetricsCallback()
-    logger = CSVLogger(log_dir,name="train_te",flush_logs_every_n_steps=5)
+    logger = CSVLogger(log_dir,name="train_te",flush_logs_every_n_steps=1)
     trainer = pl.Trainer(gpus=1,precision=32,limit_train_batches=1.,
                          max_epochs=1,log_every_n_steps=1,
                          callbacks=[tr_report],logger=logger)
@@ -305,7 +145,7 @@ def launch_training(cfg):
 
     # -- validation performance --
     val_report = MetricsCallback()
-    logger = CSVLogger(log_dir,name="val_te",flush_logs_every_n_steps=5)
+    logger = CSVLogger(log_dir,name="val_te",flush_logs_every_n_steps=1)
     trainer = pl.Trainer(gpus=1,precision=32,limit_train_batches=1.,
                          max_epochs=1,log_every_n_steps=1,
                          callbacks=[val_report],logger=logger)
@@ -331,33 +171,6 @@ def launch_training(cfg):
 
     return results
 
-def default_cfg():
-    # -- config --
-    cfg = edict()
-    cfg.nframes = 5
-    cfg.checkpoint_dir = "/home/gauenk/Documents/packages/colanet/output/checkpoints/"
-    cfg.num_workers = 4
-    cfg.device = "cuda:0"
-    cfg.batch_size = 1
-    cfg.saved_dir = "./output/saved_results/"
-    cfg.device = "cuda:0"
-    cfg.dname = "davis"
-    cfg.flow = "true"
-    cfg.mtype = "gray"
-    cfg.bw = True
-    cfg.nsamples_at_testing = 10
-    cfg.nsamples_tr = 500
-    cfg.nsamples_val = 30
-    cfg.rand_order_val = False
-    cfg.index_skip_val = 5
-    cfg.nepochs = 5
-    cfg.ensemble = "false"
-    cfg.log_root = "./output/log"
-    return cfg
-
-def test_tuned_models(cfg):
-    pass
-
 def main():
 
     # -- print os pid --
@@ -366,22 +179,42 @@ def main():
     # -- init --
     verbose = True
     cache_dir = ".cache_io"
-    cache_name = "train_rgb_net" # current!
+    cache_name = "train_rgb_net"
     cache = cache_io.ExpCache(cache_dir,cache_name)
     # cache.clear()
 
     # -- create exp list --
     ws,wt = [10],[5]
     sigmas = [50.]#,30.,10.]
-    isizes = ["96_96"]
-    ca_fwd_list = ["dnls_k","default"]
+    isizes = ["128_128"]
+    flow = ['false']
+    ca_fwd_list = ["dnls_k"]
     exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"isize":isizes,
-                 "ca_fwd":ca_fwd_list}
-    exps = cache_io.mesh_pydicts(exp_lists) # create mesh
+                 "ca_fwd":ca_fwd_list,'flow':flow}
+    exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
+
+    # -- default --
+    exp_lists['ca_fwd'] = ['default']
+    exp_lists['flow'] = ['false']
+    exp_lists['isize'] = ['128_128']
+    exps_b = cache_io.mesh_pydicts(exp_lists) # create mesh
+
+    # -- try training "dnls_k" without flow --
+    # exp_lists['ca_fwd'] = ['dnls_k']
+    # exp_lists['flow'] = ['false']
+    # exps_c = cache_io.mesh_pydicts(exp_lists) # create mesh
+
+    # -- agg --
+    # exps = exps_a + exps_b
+    # exps = exps_a + exps_b# + exps_c
+    exps = exps_a + exps_b
     nexps = len(exps)
 
     # -- group with default --
-    cfg = default_cfg()
+    cfg = configs.default_train_cfg()
+    cfg.nsamples_tr = 200
+    cfg.nepochs = 10
+    cfg.persistent_workers = True
     cache_io.append_configs(exps,cfg) # merge the two
 
     # -- launch each experiment --
@@ -394,10 +227,15 @@ def main():
             print("-="*25+"-")
             pp.pprint(exp)
 
-        # -- logic --
+        # -- check if loaded --
         uuid = cache.get_uuid(exp) # assing ID to each Dict in Meshgrid
         # cache.clear_exp(uuid)
         results = cache.load_exp(exp) # possibly load result
+
+        # -- possibly continue from current epochs --
+        # todo:
+
+        # -- run experiment --
         if results is None: # check if no result
             exp.uuid = uuid
             results = launch_training(exp)
@@ -410,13 +248,15 @@ def main():
     print(records['best_model_path'].iloc[0])
     print(records['best_model_path'].iloc[1])
 
+
     # -- load res --
     uuids = list(records['uuid'].to_numpy())
     cas = list(records['ca_fwd'].to_numpy())
     fns = list(records['init_val_results_fn'].to_numpy())
     res_a = read_pickle(fns[0])
     res_b = read_pickle(fns[1])
-    print(uuids,cas,fns)
+    print(uuids)
+    print(cas)
     print(res_a['test_psnr'])
     print(res_a['test_index'])
     print(res_b['test_psnr'])

@@ -124,6 +124,7 @@ class ContextualAttention_Enhance(nn.Module):
         b2 = self.theta(b)
         b3 = self.phi(b)
         region = None
+        reflect_bounds = False
 
         # -- unpack parameters --
         t,c,h,w = b1.shape
@@ -137,7 +138,7 @@ class ContextualAttention_Enhance(nn.Module):
         ws,pt,wt = -1,1,0
         region = [0,0,h,w] if region is None else region
         device = b.device
-        k = 100#int(64*64 * .1)
+        k = -1#int(64*64 * .1)
 
         # -- get search size --
         cr_h = region[2] - region[0]
@@ -147,10 +148,13 @@ class ContextualAttention_Enhance(nn.Module):
         nh = (cr_h-1)//stride0+1
         nw = (cr_w-1)//stride0+1
         ntotal = t * nh * nw
-        nbatch = ntotal//(t*2)
+        bdiv = 1 if self.training else 1
+        nbatch = ntotal//(t*bdiv)
+        nbatch = min(nbatch,2048)
         nbatches = (ntotal-1) // nbatch + 1
-        use_k = True
-        # print(nbatch)
+        use_k = False
+        ws,wt = -1,0
+        exact = True
 
         # -- offsets --
         oh0,ow0,oh1,ow1 = 1,1,3,3
@@ -162,53 +166,51 @@ class ContextualAttention_Enhance(nn.Module):
         wfold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
                                  adj=0,only_full=False,use_reflect=False,
                                  device=device)
-        scatter = dnls.scatter.ScatterNl(ps,pt,exact=exact,adj=0,use_bounds=False)
+        scatter = dnls.scatter.ScatterNl(ps,pt,exact=exact,adj=0,reflect_bounds=False)
         iunfold = dnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,
                                        adj=0,only_full=False,border="zero")
-        ws,wt = 10,2
         fflow = optional(flows,'fflow',None)
         bflow = optional(flows,'bflow',None)
         xsearch = dnls.xsearch.CrossSearchNl(fflow, bflow, k, ps, pt, ws, wt,
                                              oh0, ow0, oh1, ow1, chnls=chnls,
-                                             dilation=dil,stride=stride1,
-                                             use_bound=False,use_k=use_k,
-                                             use_search_abs=False,exact=exact)
-        # xsearch_nk = dnls.xsearch.CrossSearchNl(None, None, k, ps, pt, ws, wt,
-        #                                         oh0, ow0, oh1, ow1,chnls=chnls,
-        #                                         dilation=dil,stride=stride1,
-        #                                         use_bound=False,use_k=False)
+                                             dilation=dil, stride=stride1,
+                                             reflect_bounds=False, use_k=use_k,
+                                             use_search_abs=True, exact=exact)
+        wpsum = dnls.wpsum.WeightedPatchSum(ps, pt, h_off=0, w_off=0, dilation=dil,
+                                            reflect_bounds=reflect_bounds, adj=0, exact=exact)
 
-        # -- unfold patches --
-        # patches = th.nn.functional.unfold(b2,(ps,ps))#,0,-1)
-        # b1_ones = th.ones_like(b1)
-        # b1 = th.ones_like(b1)
-        # patches_a,_ = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
-        #                                     strides=[self.stride_1, self.stride_1],
-        #                                     rates=[1, 1],padding='same')
-        # patches_b,_ = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
-        #                                     strides=[self.stride_2, self.stride_2],
-        #                                     rates=[1, 1],padding='same')
-        # patches,_ = extract_image_patches(b2,ksizes=[self.ksize, self.ksize],
-        #                                   strides=[self.stride_2, self.stride_2],
-        #                                   rates=[1, 1],padding='same')
-        # patches = patches.transpose(2,1)
-        # print("patches.shape: ",patches.shape)
+        # -- extract patches --
+        patch_28, paddings_28 = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
+                                                      strides=[self.stride_1, self.stride_1],
+                                                      rates=[1, 1],
+                                                      padding='same')
+        patch_28 = patch_28.view(5, 16, kernel, kernel, -1)
+        patch_28 = patch_28.permute(0, 4, 1, 2, 3)
+        patch_28_group = torch.split(patch_28, 1, dim=0)
 
-        # patches = iunfold(b2,0,-1)
-        # patches = rearrange(patches,'(t n) 1 1 c h w -> t n (c h w)',t=t)
-        # assert_nonan(patches)
-        # _,xsize,dim = patches.shape
+        patch_112, paddings_112 = extract_image_patches(b2, ksizes=[self.ksize, self.ksize],
+                                                        strides=[self.stride_2, self.stride_2],
+                                                        rates=[1, 1],
+                                                        padding='same')
 
-        # print(patches.shape)
-        # exit(0)
-        # print(patches[0,0].view(-1,7,7)[:3][0])
-        # print(patches_iu[0,0].view(-1,7,7)[:3][0])
-        # exit(0)
+        patch_112 = patch_112.view(5, 16, kernel, kernel, -1)
+        patch_112 = patch_112.permute(0, 4, 1, 2, 3)
+        patch_112_group = torch.split(patch_112, 1, dim=0)
+
+        patch_112_2, paddings_112_2 = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
+                                                        strides=[self.stride_2, self.stride_2],
+                                                        rates=[1, 1],
+                                                        padding='same')
+
+        patch_112_2 = patch_112_2.view(5, 16, kernel, kernel, -1)
+        patch_112_2 = patch_112_2.permute(0, 4, 1, 2, 3)
+        patch_112_group_2 = torch.split(patch_112_2, 1, dim=0)
 
         # -- batch across queries --
         for index in range(nbatches):
 
             # -- timer --
+            # print("%d/%d" % (index+1,nbatches))
             timer = colanet.utils.timer.ExpTimer()
 
             # -- batch info --
@@ -223,42 +225,70 @@ class ContextualAttention_Enhance(nn.Module):
             # -- search --
             # print(iqueries)
             timer.start("xsearch")
-            nlDists_cu,nlInds_cu = xsearch(b1,iqueries,b3)
+            dists,inds = xsearch(b1,iqueries,b3)
+
+            # -- re-compute dists for gradients --
+            # xi = patch_112_group_2[index]
+            # xi = xi.permute(0, 2, 3, 4, 1)
+            # xi = xi.view(xi.shape[0],-1,xi.shape[4])
+            # wi = patch_28_group[index]
+            # k_s = wi[0].shape[2]
+            # wi = wi.view(wi.shape[0],wi.shape[1],-1)
+            # pi = patch_112_group[index].view(1024,-1)
+            # score_map = torch.matmul(wi,xi)
+            # yi = score_map.view(64,-1)
+            # dists = yi
+
+            # assert not(th.any(inds == -1).item())
+
             # th.cuda.synchronize()
             timer.stop("xsearch")
             # nlDists_nk,nlInds_nk = xsearch_nk(b1,iqueries,b3)
-            if nlDists_cu.ndim == 3:
-                nlDists_cu = rearrange(nlDists_cu,'d0 h w -> d0 (h w)')
+            if dists.ndim == 3:
+                dists = rearrange(dists,'d0 h w -> d0 (h w)')
             # if nlDists_nk.ndim == 3:
             #     nlDists_nk = rearrange(nlDists_nk,'d0 h w -> d0 (h w)')
-            # print(nlDists_cu[:3,:3])
+            # print(dists[:3,:3])
 
             # -- attn mask --
             timer.start("misc")
-            yi = F.softmax(nlDists_cu*self.softmax_scale,1)
+            yi = F.softmax(dists*self.softmax_scale,1)
             assert_nonan(yi)
             # yi_nk = F.softmax(nlDists_nk*self.softmax_scale,1)
             # assert_nonan(yi_nk)
 
             # -- get top k patches --
-            if use_k:
-                yi = yi[...,None].type(th.float64)
-                patches_i = scatter(b2,nlInds_cu).type(th.float64)
-                patches_i = rearrange(patches_i,'n k 1 c h w -> n k (c h w)')
-                assert_nonan(patches_i)
-                _,k,dim = patches_i.shape
-                zi = th.sum(yi * patches_i,1).type(th.float32)
-            else:
-                # -- scatter new vid type for each ti --
-                # print(yi.shape,patches[index].shape)
-                # zi = th.matmul(yi, patches[index])
-                zi = []
-                for ti in range(t):
-                    args_i = th.where(iqueries[:,0] == ti)
-                    zi_i = th.mm(yi[args_i], patches[ti])
-                    zi.append(zi_i)
-                zi = th.cat(zi)
-                assert_nonan(zi)
+            # yi = yi.detach()
+            zi = wpsum(b2,yi,inds).view(iqueries.shape[0],-1)
+            # print(zi.shape)
+
+            #
+            # -- passes --
+            #
+
+            # pi = patch_112_group[index].view(h*w,-1)
+            # zi = torch.mm(yi, pi)
+            # exit(0)
+
+            # if use_k:
+            #     zi = wpsum(b2,yi,inds).view(iqueries.shape[0],-1)
+            #     # yi = yi[...,None].type(th.float64)
+            #     # patches_i = scatter(b2,inds).type(th.float64)
+            #     # patches_i = rearrange(patches_i,'n k 1 c h w -> n k (c h w)')
+            #     # assert_nonan(patches_i)
+            #     # _,k,dim = patches_i.shape
+            #     # zi = th.sum(yi * patches_i,1).type(th.float32)
+            # else:
+            #     # -- scatter new vid type for each ti --
+            #     # print(yi.shape,patches[index].shape)
+            #     # zi = th.matmul(yi, patches[index])
+            #     zi = []
+            #     for ti in range(t):
+            #         args_i = th.where(iqueries[:,0] == ti)
+            #         zi_i = th.mm(yi[args_i], patches[ti])
+            #         zi.append(zi_i)
+            #     zi = th.cat(zi)
+            #     assert_nonan(zi)
             # zi_dnls = zi
             # th.cuda.synchronize()
             timer.stop("misc")
@@ -377,7 +407,7 @@ class ContextualAttention_Enhance(nn.Module):
         xsearch = dnls.xsearch.CrossSearchNl(fflow, bflow, -1, ps, pt, ws, wt,
                                              oh0, ow0, oh1, ow1,
                                              chnls=chnls,dilation=dil,stride=stride1,
-                                             use_bound=False,use_k=False,exact=exact)
+                                             reflect_bounds=False,use_k=False,exact=exact)
         # -- unfold patches --
         # patches = th.nn.functional.unfold(b2,(ps,ps))#,0,-1)
         # b1_ones = th.ones_like(b1)
@@ -416,37 +446,37 @@ class ContextualAttention_Enhance(nn.Module):
 
             # -- search --
             # print(iqueries)
-            nlDists_cu,nlInds_cu = xsearch(b1,iqueries,b3)
-            # nlDists_cu,nlInds_cu = xsearch(b1_ones,iqueries,b1)
+            dists,inds = xsearch(b1,iqueries,b3)
+            # dists,inds = xsearch(b1_ones,iqueries,b1)
             # th.cuda.synchronize()
-            # print("nlDists_cu.shape: ",nlDists_cu.shape)
-            # nlDists_cu = rearrange(nlDists_cu,'d0 h w -> d0 (h w)')
+            # print("dists.shape: ",dists.shape)
+            # dists = rearrange(dists,'d0 h w -> d0 (h w)')
 
             # print("patches_a.shape: ",patches_a.shape)
             # print("patches_b.shape: ",patches_b.shape)
             # patches_a = th.ones_like(patches_a)
             # patches_b = th.ones_like(patches_b)
             # score_map = th.matmul(patches_a[index].T,patches_b[index])
-            # print("nlDists_cu.shape: ",nlDists_cu.shape)
+            # print("dists.shape: ",dists.shape)
             # exit(0)
 
             # -- viz --
-            # print(nlDists_cu[:3,:3])
+            # print(dists[:3,:3])
             # print(score_map[:3,:3])
 
-            # print(nlDists_cu[96:99,96:99])
+            # print(dists[96:99,96:99])
             # print(score_map[96:99,96:99])
 
 
             # -- test --
-            # diff = th.abs(nlDists_cu - score_map)/(th.abs(score_map)+1e-10)
+            # diff = th.abs(dists - score_map)/(th.abs(score_map)+1e-10)
             # error = diff.sum()
             # print(error)
             # error = diff.max()
             # print(error)
 
             # -- attn mask --
-            yi = F.softmax(nlDists_cu*self.softmax_scale,1)
+            yi = F.softmax(dists*self.softmax_scale,1)
             assert_nonan(yi)
 
             # -- scatter new vid type for each ti --
@@ -462,7 +492,16 @@ class ContextualAttention_Enhance(nn.Module):
             # print(error)
             # exit(0)
             # print("iqueries.shape: ",iqueries.shape)
+
+            #
+            # -- passes --
+            #
             zi = th.matmul(yi, patches[index])
+
+            #
+            # -- misc --
+            #
+
             # print("zi.shape: ",zi.shape)
             # exit(0)
             # zi = []
@@ -538,7 +577,7 @@ class ContextualAttention_Enhance(nn.Module):
         # dnls_search = dnls.xsearch.CrossScaleSearch(flows.fflow, flows.bflow, k, ps, pt,
         #                                             ws, wt, chnls=chnls,dilation=1, stride=1)
 
-        # yi = F.softmax(nlDists_cu*self.softmax_scale,1)
+        # yi = F.softmax(dists*self.softmax_scale,1)
         # patches = scatter_nl(x,queryInds)
         # zi = yi @ patches
         # ones = th.ones_like(zi)
