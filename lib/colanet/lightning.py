@@ -64,7 +64,7 @@ class ColaNetLit(pl.LightningModule):
         self.ca_fwd = ca_fwd
 
     def forward(self,vid):
-        if self.ca_fwd == "dnls_k":
+        if self.ca_fwd == "dnls_k" or self.ca_fwd == "dnls":
             return self.forward_dnls_k(vid)
         elif self.ca_fwd == "default":
             return self.forward_default(vid)
@@ -103,7 +103,7 @@ class ColaNetLit(pl.LightningModule):
         return flows
 
     def configure_optimizers(self):
-        optim = th.optim.Adam(self.parameters(),lr=1e-4)
+        optim = th.optim.Adam(self.parameters(),lr=5e-5)
         return optim
 
     def training_step(self, batch, batch_idx):

@@ -8,6 +8,7 @@ from einops import rearrange,repeat
 from colanet.utils.misc import assert_nonan
 import colanet
 from colanet.utils.misc import optional
+from torch.nn.functional import unfold as th_unfold
 
 """
 fundamental functions
@@ -59,7 +60,8 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same', region
     ksize = ksizes[0]
     adj = (ksize//2) - paddings[0]
     stride = strides[0]
-    coords = [0,0,h,w] if region is None else region[2:]
+    coords = [0,0,h,w] if (region is None) else region[2:]
+    adj = 0
     unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,
                                   adj=adj,only_full=False,border="zero")
     patches = unfold(images)
@@ -136,9 +138,20 @@ class ContextualAttention_Enhance(nn.Module):
         chnls = b2.shape[1]
         dil,adj = 1,0
         ws,pt,wt = -1,1,0
+        use_search_abs = ws == -1
         region = [0,0,h,w] if region is None else region
         device = b.device
-        k = -1#int(64*64 * .1)
+
+        # -- global region --
+        ws,wt,k = -1,0,-1
+        use_k = not(ws==-1)
+        use_search_abs = ws == -1
+
+        # -- local region --
+        # ws,wt = 40,0
+        # k = 250
+        # use_k = True
+        # use_search_abs = False
 
         # -- get search size --
         cr_h = region[2] - region[0]
@@ -148,13 +161,14 @@ class ContextualAttention_Enhance(nn.Module):
         nh = (cr_h-1)//stride0+1
         nw = (cr_w-1)//stride0+1
         ntotal = t * nh * nw
-        bdiv = 1 if self.training else 1
+        bdiv = t if self.training else 1
         nbatch = ntotal//(t*bdiv)
-        nbatch = min(nbatch,2048)
+        # nbatch = min(nbatch,4096)
+        # nbatch = min(nbatch,4096*2)
+        nbatch = ntotal//t
+        # nbatch = nbatch if use_k else min(nbatch,2048)
         nbatches = (ntotal-1) // nbatch + 1
-        use_k = False
-        ws,wt = -1,0
-        exact = True
+        # ws,wt = -1,0
 
         # -- offsets --
         oh0,ow0,oh1,ow1 = 1,1,3,3
@@ -166,45 +180,46 @@ class ContextualAttention_Enhance(nn.Module):
         wfold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
                                  adj=0,only_full=False,use_reflect=False,
                                  device=device)
-        scatter = dnls.scatter.ScatterNl(ps,pt,exact=exact,adj=0,reflect_bounds=False)
+        # scatter = dnls.scatter.ScatterNl(ps,pt,exact=exact,adj=0,reflect_bounds=False)
         iunfold = dnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,
                                        adj=0,only_full=False,border="zero")
         fflow = optional(flows,'fflow',None)
         bflow = optional(flows,'bflow',None)
         xsearch = dnls.xsearch.CrossSearchNl(fflow, bflow, k, ps, pt, ws, wt,
-                                             oh0, ow0, oh1, ow1, chnls=chnls,
+                                             oh0, ow0, oh1, ow1, chnls=-1,
                                              dilation=dil, stride=stride1,
-                                             reflect_bounds=False, use_k=use_k,
-                                             use_search_abs=True, exact=exact)
+                                             reflect_bounds=False, use_k=use_k,use_adj=True,
+                                             use_search_abs=use_search_abs, exact=exact)
         wpsum = dnls.wpsum.WeightedPatchSum(ps, pt, h_off=0, w_off=0, dilation=dil,
                                             reflect_bounds=reflect_bounds, adj=0, exact=exact)
 
-        # -- extract patches --
-        patch_28, paddings_28 = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
-                                                      strides=[self.stride_1, self.stride_1],
-                                                      rates=[1, 1],
-                                                      padding='same')
-        patch_28 = patch_28.view(5, 16, kernel, kernel, -1)
-        patch_28 = patch_28.permute(0, 4, 1, 2, 3)
-        patch_28_group = torch.split(patch_28, 1, dim=0)
+        # -- misc --
+        raw_int_bs = list(b1.size())  # b*c*h*w
+
+        # patch_28, paddings_28 = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
+        #                                               strides=[self.stride_1, self.stride_1],
+        #                                               rates=[1, 1],
+        #                                               padding='same',region=region)
+        # # print("patch_28.shape: ",patch_28.shape)
+        # patch_28 = patch_28.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
+        # patch_28 = patch_28.permute(0, 4, 1, 2, 3)
+        # patch_28_group = torch.split(patch_28, 1, dim=0)
 
         patch_112, paddings_112 = extract_image_patches(b2, ksizes=[self.ksize, self.ksize],
                                                         strides=[self.stride_2, self.stride_2],
-                                                        rates=[1, 1],
-                                                        padding='same')
-
-        patch_112 = patch_112.view(5, 16, kernel, kernel, -1)
+                                                        rates=[1, 1],padding='same',region=None)
+        # print("patch_112.shape: ",patch_112.shape)
+        patch_112 = patch_112.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_112 = patch_112.permute(0, 4, 1, 2, 3)
         patch_112_group = torch.split(patch_112, 1, dim=0)
 
-        patch_112_2, paddings_112_2 = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
-                                                        strides=[self.stride_2, self.stride_2],
-                                                        rates=[1, 1],
-                                                        padding='same')
-
-        patch_112_2 = patch_112_2.view(5, 16, kernel, kernel, -1)
-        patch_112_2 = patch_112_2.permute(0, 4, 1, 2, 3)
-        patch_112_group_2 = torch.split(patch_112_2, 1, dim=0)
+        # patch_112_2, paddings_112_2 = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
+        #                                                 strides=[self.stride_2, self.stride_2],
+        #                                                 rates=[1, 1],
+        #                                                 padding='same',region=None)
+        # patch_112_2 = patch_112_2.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
+        # patch_112_2 = patch_112_2.permute(0, 4, 1, 2, 3)
+        # patch_112_group_2 = torch.split(patch_112_2, 1, dim=0)
 
         # -- batch across queries --
         for index in range(nbatches):
@@ -226,26 +241,14 @@ class ContextualAttention_Enhance(nn.Module):
             # print(iqueries)
             timer.start("xsearch")
             dists,inds = xsearch(b1,iqueries,b3)
+            # print("ref: ",dists[:3,:3])
+            # print("dists.shape: ",dists.shape)
 
-            # -- re-compute dists for gradients --
-            # xi = patch_112_group_2[index]
-            # xi = xi.permute(0, 2, 3, 4, 1)
-            # xi = xi.view(xi.shape[0],-1,xi.shape[4])
-            # wi = patch_28_group[index]
-            # k_s = wi[0].shape[2]
-            # wi = wi.view(wi.shape[0],wi.shape[1],-1)
-            # pi = patch_112_group[index].view(1024,-1)
-            # score_map = torch.matmul(wi,xi)
-            # yi = score_map.view(64,-1)
-            # dists = yi
-
-            # assert not(th.any(inds == -1).item())
+            # patch_112_group_2
 
             # th.cuda.synchronize()
             timer.stop("xsearch")
             # nlDists_nk,nlInds_nk = xsearch_nk(b1,iqueries,b3)
-            if dists.ndim == 3:
-                dists = rearrange(dists,'d0 h w -> d0 (h w)')
             # if nlDists_nk.ndim == 3:
             #     nlDists_nk = rearrange(nlDists_nk,'d0 h w -> d0 (h w)')
             # print(dists[:3,:3])
@@ -266,8 +269,21 @@ class ContextualAttention_Enhance(nn.Module):
             # -- passes --
             #
 
+            # print("patch_112_group[index].shape: ",patch_112_group[index].shape)
             # pi = patch_112_group[index].view(h*w,-1)
             # zi = torch.mm(yi, pi)
+
+            # print("zi.shape: ",pi.shape)
+            # print(zi[:3,:3])
+            # print(zi_p[:3,:3])
+            # error = th.abs(zi - zi_p).mean()
+            # print(error)
+            # error = th.abs(zi - zi_p).max()
+            # print(error)
+            # diff = th.abs(zi - zi_p)
+            # args = th.where(diff>1e-2)
+            # print(zi[args][:5])
+            # print(zi_p[args][:5])
             # exit(0)
 
             # if use_k:
@@ -406,8 +422,9 @@ class ContextualAttention_Enhance(nn.Module):
         bflow = optional(flows,'bflow',None)
         xsearch = dnls.xsearch.CrossSearchNl(fflow, bflow, -1, ps, pt, ws, wt,
                                              oh0, ow0, oh1, ow1,
-                                             chnls=chnls,dilation=dil,stride=stride1,
-                                             reflect_bounds=False,use_k=False,exact=exact)
+                                             chnls=-1,dilation=dil,stride=stride1,
+                                             reflect_bounds=False,use_k=False,
+                                             use_search_abs=True,exact=exact)
         # -- unfold patches --
         # patches = th.nn.functional.unfold(b2,(ps,ps))#,0,-1)
         # b1_ones = th.ones_like(b1)
@@ -613,8 +630,6 @@ class ContextualAttention_Enhance(nn.Module):
                                                         rates=[1, 1],
                                                         padding='same',region=region)
         # print("patch_112.shape: ",patch_112.shape)
-
-
         patch_112 = patch_112.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_112 = patch_112.permute(0, 4, 1, 2, 3)
         patch_112_group = torch.split(patch_112, 1, dim=0)

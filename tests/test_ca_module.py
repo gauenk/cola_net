@@ -113,8 +113,10 @@ def test_original_refactored(sigma):
     clean = th.cat([clean,]*5,0)
     clean = clean[:,[0]].contiguous()
     noisy = clean + 25./255 * th.randn_like(clean)
-    print("noisy.shape: ",noisy.shape)
-    print("clean.shape: ",noisy.shape)
+    # print("noisy.shape: ",noisy.shape)
+    # print("clean.shape: ",noisy.shape)
+    # clean = th.randn((5,1,480,910)).to(noisy.device)
+    # noisy = th.randn((5,1,480,910)).to(noisy.device)
     # noisy = th.cat([noisy,noisy],-1)
     # clean = th.cat([clean,clean],-1)
     # noisy = th.cat([noisy,noisy],-2)
@@ -154,133 +156,165 @@ def test_original_refactored(sigma):
     # -- each version --
     t,c,h,w = noisy.shape
     coords=[0,0,h,w]
-    for ref_version in ["ref"]: #["original","ref"]:
 
-        # -- load model --
-        ref_model = colanet.refactored.load_model(mtype,sigma).eval()
-        ref_model.chop = chop
+    # -- load model --
+    ref_model = colanet.refactored.load_model(mtype,sigma).eval()
+    ref_model.chop = chop
+    # ref_model.model.load_state_dict(og_model.model.state_dict())
 
-        # -- optional adapt --
-        run_adapt = (internal_adapt_nsteps>0) and (internal_adapt_nepochs>0)
-        if run_adapt:
-            ref_model.run_internal_adapt(noisy,sigma,flows=flows,
-                                         ws=ws,wt=wt,batch_size=batch_size,
-                                         nsteps=internal_adapt_nsteps,
-                                         nepochs=internal_adapt_nepochs,
-                                         verbose=True)
+    # -- optional adapt --
+    run_adapt = (internal_adapt_nsteps>0) and (internal_adapt_nepochs>0)
+    if run_adapt:
+        ref_model.run_internal_adapt(noisy,sigma,flows=flows,
+                                     ws=ws,wt=wt,batch_size=batch_size,
+                                     nsteps=internal_adapt_nsteps,
+                                     nepochs=internal_adapt_nepochs,
+                                     verbose=True)
 
-        # -- refactored exec --
-        timer.start("refactored")
-        if no_grad:
-            with th.no_grad():
-                # deno_ref = ref_model.my_fwd(noisy,ensemble=ensemble).detach()
-                deno_ref = ref_model.ca_forward(noisy_ref).detach()
-        else:
-            ref_model.train()
-            deno_ref = ref_model.ca_forward(noisy_ref)
-        timer.stop("refactored")
+    # -- refactored exec --
+    timer.start("refactored")
+    if no_grad:
+        with th.no_grad():
+            # deno_ref = ref_model.my_fwd(noisy,ensemble=ensemble).detach()
+            deno_ref = ref_model.ca_forward(noisy_ref).detach()
+    else:
+        ref_model.train()
+        deno_ref = ref_model.ca_forward(noisy_ref)
+    timer.stop("refactored")
 
-        # -- viz --
-        if verbose:
-            print(deno_og.shape,deno_ref.shape)
+    # -- viz --
+    if verbose:
+        print(deno_og.shape,deno_ref.shape)
 
-        # -- test --
-        error = th.mean((deno_og - deno_ref).abs()).item()
-        if verbose: print("error: ",error)
-        assert error < 1e-6
+    # -- test --
+    error = th.mean((deno_og - deno_ref).abs()).item()
+    if verbose: print("error: ",error)
+    assert error < 1e-6
 
-        # -- compute gradient --
-        deno_grad = th.randn_like(deno_og)
-        loss = th.sum(th.abs(deno_og - deno_grad))
-        loss.backward()
-        loss = th.sum(th.abs(deno_ref - deno_grad))
-        loss.backward()
+    # -- compute gradient --
+    deno_tgt = 2.*(th.randn_like(deno_og)-0.5)
+    deno_tgt = th.ones_like(deno_tgt)
+    deno_tgt = th.rand_like(deno_tgt)
+    loss = th.mean(th.abs(deno_og - deno_tgt))*10.
+    loss.backward()
+    loss = th.mean(th.abs(deno_ref - deno_tgt))*10.
+    loss.backward()
 
-        #
-        # -- check grads --
-        #
+    #
+    # -- check grads --
+    #
 
-        # -- get grads --
-        grads_og,g_og,theta_og,phi_og = get_grads(og_model,"cuda:0")
-        grads_ref,g_ref,theta_ref,phi_ref = get_grads(ref_model,"cuda:0")
-        rel_error = th.abs(grads_og - grads_ref)/(th.abs(grads_og)+1e-8)
+    # -- get grads --
+    grads_og,g_og,theta_og,phi_og = get_grads(og_model,"cuda:0")
+    grads_ref,g_ref,theta_ref,phi_ref = get_grads(ref_model,"cuda:0")
+    rel_error = th.abs(grads_og - grads_ref)/(th.abs(grads_og)+1e-8)
+    # print(len(grads_og))
 
-        print(grads_og[:3])
-        print(grads_ref[:3])
+    diff = th.abs(grads_og - grads_ref)
+    args = th.where(diff > 1e-4)
+    # almost_equal(grads_og,grads_ref)
+    print(len(args[0]))
+    print(grads_og[args][:5])
+    print(grads_ref[args][:5])
+    # exit(0)
+    print(grads_og[:3])
+    print(grads_ref[:3])
 
-        if len(g_og) > 1:
-            print("g")
-            for i in range(3):
-                print("--- %d ---" % i)
-                print(g_og[i,:3])
-                print(g_ref[i,:3])
+    if len(g_og) > 1:
+        print("g")
+        for i in range(3):
+            print("--- %d ---" % i)
+            print(g_og[i,:3])
+            print(g_ref[i,:3])
 
-                diff = (g_og[i] - g_ref[i]).abs()
-                error = diff.mean().item()
-                print("mean: ",error)
-                error = diff.max().item()
-                print("max: ",error)
+            diff = (g_og[i] - g_ref[i]).abs()
+            error = diff.mean().item()
+            print("mean: ",error)
+            error = diff.max().item()
+            print("max: ",error)
 
-        if len(theta_og) > 1:
-            print("theta")
-            for i in range(3):
-                print("--- %d ---" % i)
-                print(theta_og[i,:3])
-                print(theta_ref[i,:3])
+    if len(theta_og) > 1:
+        print("theta")
+        for i in range(3):
+            print("--- %d ---" % i)
+            print(theta_og[i,:3])
+            print(theta_ref[i,:3])
 
-                diff = (theta_og[i] - theta_ref[i]).abs()
-                error = diff.mean().item()
-                print("mean: ",error)
-                error = diff.max().item()
-                print("max: ",error)
-
-
-        if len(phi_og) > 1:
-            print("phi")
-            for i in range(3):
-                print("--- %d ---" % i)
-                print(phi_og[i,:3])
-                print(phi_ref[i,:3])
-
-                diff = (phi_og[i] - phi_ref[i]).abs()
-                error = diff.mean().item()
-                print("mean: ",error)
-                error = diff.max().item()
-                print("max: ",error)
+            diff = (theta_og[i] - theta_ref[i]).abs()
+            error = diff.mean().item()
+            print("mean: ",error)
+            error = diff.max().item()
+            print("max: ",error)
 
 
-        # -- gradient error comp --
-        diff = (grads_og - grads_ref).abs()/(grads_og.abs()+1e-8)
-        args = th.where(th.abs(diff) > 0.01)[0]
-        print(args)
-        print(grads_og[args][:10])
-        print(grads_ref[args][:10])
+    if len(phi_og) > 1:
+        print("phi")
+        for i in range(3):
+            print("--- %d ---" % i)
+            print(phi_og[i,:3])
+            print(phi_ref[i,:3])
 
-        # -- checks --
-        diff[args] = 0
-        assert len(args) < 60, "allow some ineq"
+            diff = (phi_og[i] - phi_ref[i]).abs()
+            error = diff.mean().item()
+            print("mean: ",error)
+            error = diff.max().item()
+            print("max: ",error)
 
-        tol = 1.
-        error = diff.mean().item()
-        print("Mean Error: ",error)
-        assert error < tol
 
-        tol = 1e-2
-        error = diff.max().item()
-        print("Max Error: ",error)
-        assert error < tol
+    # -- gradient error comp --
+    diff = (grads_og - grads_ref).abs()/(grads_og.abs()+1e-8)
+    args = th.where(th.abs(diff) > 0.01)[0]
+    print(args)
+    print(grads_og[args][:10])
+    print(grads_ref[args][:10])
 
-        # -- viz [theta] --
-        # print(theta_og.shape)
-        # diff = (theta_og - theta_ref).abs()/(theta_og.abs()+1e-8)
-        # args = th.where(th.abs(diff) > 0.1)
-        # print(args)
-        # print(theta_og[args][:10])
-        # print(theta_ref[args][:10])
-        # print(diff[args][:10])
+    # -- checks --
+    diff[args] = 0
+    assert len(args) < 60, "allow some ineq"
+
+    tol = 1.
+    error = diff.mean().item()
+    print("Mean Error: ",error)
+    assert error < tol
+
+    tol = 1e-2
+    error = diff.max().item()
+    print("Max Error: ",error)
+    assert error < tol
+
+    # -- viz [theta] --
+    # print(theta_og.shape)
+    # diff = (theta_og - theta_ref).abs()/(theta_og.abs()+1e-8)
+    # args = th.where(th.abs(diff) > 0.1)
+    # print(args)
+    # print(theta_og[args][:10])
+    # print(theta_ref[args][:10])
+    # print(diff[args][:10])
 
     print(timer)
 
+
+def almost_equal(a,b):
+    tol0 = 1e-8
+    tol_abs = 1e-5
+    tol_rabs = 1e-4
+
+    a_abs = a.abs()
+    b_abs = b.abs()
+    diff = th.abs(a - b)
+    s_abs = a_abs + b_abs
+    m_abs = th.min(a_abs,b_abs)
+
+    args0 = th.where(s_abs < tol0)
+    args1 = th.where(s_abs >= tol0)
+
+    lt_abs = th.all(diff[args0] < tol_abs).item()
+    lt_rabs = th.all(diff[args1]/m_abs[args1] < tol_rabs).item()
+    print(diff[args1])
+    print(a[args1])
+    print(b[args1])
+    assert lt_abs is True
+    assert lt_rabs is True
 
 def get_grads(model,device):
     grads,g,theta,phi = [],[],[],[]

@@ -27,6 +27,7 @@ import colanet
 import colanet.configs as configs
 from colanet import lightning
 from colanet.utils.misc import optional
+import colanet.utils.gpu_mem as gpu_mem
 from colanet.utils.misc import rslice,write_pickle,read_pickle
 
 def run_exp(cfg):
@@ -46,6 +47,7 @@ def run_exp(cfg):
     results.timer_flow = []
     results.timer_adapt = []
     results.timer_deno = []
+    results.mem_gb = []
 
     # -- network --
     nchnls = 1 if cfg.bw else 3
@@ -129,9 +131,11 @@ def run_exp(cfg):
         # -- denoise --
         batch_size = 390*100
         timer.start("deno")
+        gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
         with th.no_grad():
             deno = model(noisy/imax,flows=flows)*imax
         timer.stop("deno")
+        mem_gb = gpu_mem.print_peak_gpu_stats(True,"val",reset=True)
         deno = deno.clamp(0.,imax)
 
         # -- save example --
@@ -153,6 +157,7 @@ def run_exp(cfg):
         results.deno_fns.append(deno_fns)
         results.vid_frames.append(vid_frames)
         results.vid_name.append([cfg.vid_name])
+        results.mem_gb.append([mem_gb])
         for name,time in timer.items():
             results[name].append(time)
 
@@ -180,9 +185,12 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
     # -- read cache --
     results = cache.load_exp(cfg) # possibly load result
     if ca_fwd == "dnls_k":
-        model_path = "output/checkpoints/5acb13a6-4771-4633-9192-8a8c53df975c-epoch=11-val_loss=2.83e-03.ckpt"
+        # model_path = "output/checkpoints/70744b81-5098-43fc-affd-4b1be55931ac-epoch=96-val_loss=5.03e-01.ckpt"
+        model_path = "output/checkpoints/4eaaea37-80e3-4f0c-945b-2be17a3be3c3-epoch=08-val_loss=3.30e-03.ckpt"
     elif ca_fwd == "default":
-        model_path = "output/checkpoints/dba41c7b-8e9e-4b0d-9e14-9005fc0dd908-epoch=00-val_loss=2.08e-03.ckpt"
+        model_path = "output/checkpoints/4eaaea37-80e3-4f0c-945b-2be17a3be3c3-epoch=08-val_loss=3.30e-03.ckpt"
+        # model_path = "output/checkpoints/4eaaea37-80e3-4f0c-945b-2be17a3be3c3-epoch=63-val_loss=3.45e-03.ckpt"
+        # model_path = "output/checkpoints/70744b81-5098-43fc-affd-4b1be55931ac-epoch=96-val_loss=5.03e-01.ckpt"
     else:
         raise ValueError(f"Uknown ca_fwd [{ca_fwd}]")
 
@@ -203,7 +211,7 @@ def main():
     cache_dir = ".cache_io"
     cache_name = "test_rgb_net" # current!
     cache = cache_io.ExpCache(cache_dir,cache_name)
-    # cache.clear()
+    cache.clear()
 
     # -- get defaults --
     cfg = configs.default_test_vid_cfg()
@@ -273,9 +281,12 @@ def main():
             agg_psnrs,agg_ssims = [],[]
             for vname,vdf in gdf.groupby("vid_name"):
                 psnrs = np.stack(vdf['psnrs'])
+                dtime = np.stack(vdf['timer_deno'])
+                mem_gb = np.stack(vdf['mem_gb'])
                 ssims = np.stack(vdf['ssims'])
                 psnr_mean = psnrs.mean().item()
                 ssim_mean = ssims.mean().item()
+                print(dtime,mem_gb)
                 # print(vname,psnr_mean,ssim_mean)
                 agg_psnrs.append(psnr_mean)
                 agg_ssims.append(ssim_mean)

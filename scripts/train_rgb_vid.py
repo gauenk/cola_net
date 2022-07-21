@@ -66,9 +66,10 @@ def launch_training(cfg):
                        cfg.ca_fwd,cfg.isize,cfg.bw)
 
     # -- load dataset with testing mods isizes --
-    model.isize = None
+    # model.isize = None
     cfg_clone = copy.deepcopy(cfg)
-    cfg_clone.isize = None
+    # cfg_clone.isize = None
+    cfg_clone.cropmode = "center"
     cfg_clone.nsamples_val = cfg.nsamples_at_testing
     data,loaders = data_hub.sets.load(cfg_clone)
 
@@ -123,9 +124,10 @@ def launch_training(cfg):
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
     # -- reload dataset with no isizes --
-    model.isize = None
+    # model.isize = None
     cfg_clone = copy.deepcopy(cfg)
-    cfg_clone.isize = None
+    # cfg_clone.isize = None
+    cfg_clone.cropmode = "center"
     cfg_clone.nsamples_tr = cfg.nsamples_at_testing
     cfg_clone.nsamples_val = cfg.nsamples_at_testing
     data,loaders = data_hub.sets.load(cfg_clone)
@@ -213,7 +215,7 @@ def main():
     # -- group with default --
     cfg = configs.default_train_cfg()
     cfg.nsamples_tr = 200
-    cfg.nepochs = 10
+    cfg.nepochs = 100
     cfg.persistent_workers = True
     cache_io.append_configs(exps,cfg) # merge the two
 

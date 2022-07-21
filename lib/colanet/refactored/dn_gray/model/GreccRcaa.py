@@ -166,7 +166,7 @@ class CES(nn.Module):
         # self.ca_forward_type = "default"#dnls_k"
         # self.ca_forward_type = "dnls"
         self.ca_forward_type = "dnls_k"
-        self.exact = False
+        self.exact = True
 
     def forward(self, x, region=None, flows=None):
         out = self.c1(x,region,self.ca_forward_type,flows,self.exact)

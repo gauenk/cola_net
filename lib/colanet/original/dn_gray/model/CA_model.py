@@ -105,9 +105,12 @@ class ContextualAttention_Enhance(nn.Module):
                                                         rates=[1, 1],
                                                         padding='same')
 
+        # print(patch_112.shape)
         patch_112 = patch_112.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
+        # print(patch_112.shape)
         patch_112 = patch_112.permute(0, 4, 1, 2, 3)
         patch_112_group = torch.split(patch_112, 1, dim=0)
+
 
         patch_112_2, paddings_112_2 = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
                                                         strides=[self.stride_2, self.stride_2],
@@ -134,6 +137,7 @@ class ContextualAttention_Enhance(nn.Module):
             b_s, l_s, h_s, w_s = score_map.shape
 
             yi = score_map.view(b_s, l_s, -1)
+            # print("og: ",score_map[0,:3,:3])
             yi = F.softmax(yi*self.softmax_scale, dim=2).view(l_s, -1)
             pi = pi.view(h_s * w_s, -1)
             # print("yi.shape: ",yi.shape)
