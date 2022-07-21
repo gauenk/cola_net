@@ -119,7 +119,7 @@ class ContextualAttention_Enhance(nn.Module):
         self.phi = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
                              padding=0)
 
-    def dnls_k_forward(self, b, region=None, flows=None, exact=False):
+    def dnls_k_forward(self, b, region=None, flows=None, exact=False, ws=29, wt=0, k=100):
 
         # -- get images --
         b1 = self.g(b)
@@ -136,14 +136,12 @@ class ContextualAttention_Enhance(nn.Module):
         stride0 = 4#self.stride_1
         stride1 = 1#self.stride_2
         chnls = b2.shape[1]
-        dil,adj = 1,0
-        ws,pt,wt = -1,1,0
+        dil,adj,pt = 1,0,1
         use_search_abs = ws == -1
         region = [0,0,h,w] if region is None else region
         device = b.device
 
         # -- global region --
-        ws,wt,k = -1,0,-1
         use_k = not(ws==-1)
         use_search_abs = ws == -1
 

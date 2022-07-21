@@ -47,7 +47,8 @@ from pytorch_lightning.utilities.distributed import rank_zero_only
 class ColaNetLit(pl.LightningModule):
 
     def __init__(self,mtype,sigma,batch_size=1,flow=True,
-                 ensemble=False,ca_fwd="dnls_k",isize=None,bw=False):
+                 ensemble=False,ca_fwd="dnls_k",isize=None,bw=False,
+                 ws=29,wt=0,k=100):
         super().__init__()
         self.mtype = mtype
         self.sigma = sigma
@@ -56,6 +57,9 @@ class ColaNetLit(pl.LightningModule):
         self._model = [colanet.refactored.load_model(mtype,sigma,2,self.nchnls)]
         self.net = self._model[0].model
         self.net.body[8].ca_forward_type = ca_fwd
+        self.net.body[8].ws = ws
+        self.net.body[8].wt = wt
+        self.net.body[8].k = k
         self.batch_size = batch_size
         self.flow = flow
         self.isize = isize

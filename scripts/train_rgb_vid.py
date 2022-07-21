@@ -63,7 +63,8 @@ def launch_training(cfg):
     # -- network --
     model = ColaNetLit(cfg.mtype,cfg.sigma,cfg.batch_size,
                        cfg.flow=="true",cfg.ensemble=="true",
-                       cfg.ca_fwd,cfg.isize,cfg.bw)
+                       cfg.ca_fwd,cfg.isize,cfg.bw,
+                       cfg.ws,cfg.wt,cfg.k)
 
     # -- load dataset with testing mods isizes --
     # model.isize = None
@@ -183,16 +184,16 @@ def main():
     cache_dir = ".cache_io"
     cache_name = "train_rgb_net"
     cache = cache_io.ExpCache(cache_dir,cache_name)
-    # cache.clear()
+    cache.clear()
 
     # -- create exp list --
-    ws,wt = [10],[5]
+    ws,wt,k = [10],[5],[100]
     sigmas = [50.]#,30.,10.]
     isizes = ["128_128"]
-    flow = ['false']
+    flow = ['true']
     ca_fwd_list = ["dnls_k"]
-    exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"isize":isizes,
-                 "ca_fwd":ca_fwd_list,'flow':flow}
+    exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"k":100,
+                 "isize":isizes,"ca_fwd":ca_fwd_list,'flow':flow}
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
 
     # -- default --
