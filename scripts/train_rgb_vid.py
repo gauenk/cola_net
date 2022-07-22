@@ -67,9 +67,9 @@ def launch_training(cfg):
                        cfg.ws,cfg.wt,cfg.k)
 
     # -- load dataset with testing mods isizes --
-    # model.isize = None
+    model.isize = None
     cfg_clone = copy.deepcopy(cfg)
-    # cfg_clone.isize = None
+    cfg_clone.isize = None
     cfg_clone.cropmode = "center"
     cfg_clone.nsamples_val = cfg.nsamples_at_testing
     data,loaders = data_hub.sets.load(cfg_clone)
@@ -88,6 +88,7 @@ def launch_training(cfg):
     print(init_val_results)
     init_val_res_fn = save_dir / "init_val.pkl"
     write_pickle(init_val_res_fn,init_val_results)
+    print(timer)
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     #
@@ -105,9 +106,9 @@ def launch_training(cfg):
     # -- pytorch_lightning training --
     logger = CSVLogger(log_dir,name="train",flush_logs_every_n_steps=1)
     chkpt_fn = cfg.uuid + "-{epoch:02d}-{val_loss:2.2e}"
-    checkpoint_callback = ModelCheckpoint(monitor="val_loss",save_top_k=3,mode="max",
+    checkpoint_callback = ModelCheckpoint(monitor="val_loss",save_top_k=10,mode="min",
                                           dirpath=cfg.checkpoint_dir,filename=chkpt_fn)
-    swa_callback = StochasticWeightAveraging(swa_lrs=1e-2)
+    swa_callback = StochasticWeightAveraging(swa_lrs=1e-4)
     trainer = pl.Trainer(gpus=2,precision=32,limit_train_batches=1.,
                          max_epochs=cfg.nepochs-1,log_every_n_steps=1,
                          logger=logger,gradient_clip_val=0.5,
@@ -125,10 +126,10 @@ def launch_training(cfg):
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
     # -- reload dataset with no isizes --
-    # model.isize = None
+    model.isize = None
     cfg_clone = copy.deepcopy(cfg)
-    # cfg_clone.isize = None
-    cfg_clone.cropmode = "center"
+    cfg_clone.isize = None
+    # cfg_clone.cropmode = "center"
     cfg_clone.nsamples_tr = cfg.nsamples_at_testing
     cfg_clone.nsamples_val = cfg.nsamples_at_testing
     data,loaders = data_hub.sets.load(cfg_clone)
@@ -187,12 +188,12 @@ def main():
     cache.clear()
 
     # -- create exp list --
-    ws,wt,k = [10],[5],[100]
+    ws,wt,k = [20],[5],[100]
     sigmas = [50.]#,30.,10.]
     isizes = ["128_128"]
     flow = ['true']
     ca_fwd_list = ["dnls_k"]
-    exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"k":100,
+    exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"k":k,
                  "isize":isizes,"ca_fwd":ca_fwd_list,'flow':flow}
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
 
@@ -215,7 +216,7 @@ def main():
 
     # -- group with default --
     cfg = configs.default_train_cfg()
-    cfg.nsamples_tr = 200
+    cfg.nsamples_tr = 100
     cfg.nepochs = 100
     cfg.persistent_workers = True
     cache_io.append_configs(exps,cfg) # merge the two

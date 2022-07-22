@@ -60,6 +60,7 @@ class ColaNetLit(pl.LightningModule):
         self.net.body[8].ws = ws
         self.net.body[8].wt = wt
         self.net.body[8].k = k
+        self.net.body[8].exact = False
         self.batch_size = batch_size
         self.flow = flow
         self.isize = isize
@@ -108,7 +109,9 @@ class ColaNetLit(pl.LightningModule):
 
     def configure_optimizers(self):
         optim = th.optim.Adam(self.parameters(),lr=5e-5)
-        return optim
+        StepLR = th.optim.lr_scheduler.StepLR
+        scheduler = StepLR(optim, step_size=5, gamma=0.1)
+        return [optim], [scheduler]
 
     def training_step(self, batch, batch_idx):
 

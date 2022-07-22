@@ -32,6 +32,36 @@ def same_padding(images, ksizes, strides, rates):
     return images, paddings
 
 
+def extract_image_patches_og(images, ksizes, strides, rates, padding='same'):
+    """
+    Extract patches from images and put them in the C output dimension.
+    :param padding:
+    :param images: [batch, channels, in_rows, in_cols]. A 4-D Tensor with shape
+    :param ksizes: [ksize_rows, ksize_cols]. The size of the sliding window for
+     each dimension of images
+    :param strides: [stride_rows, stride_cols]
+    :param rates: [dilation_rows, dilation_cols]
+    :return: A Tensor
+    """
+    assert len(images.size()) == 4
+    assert padding in ['same', 'valid']
+    paddings = (0, 0, 0, 0)
+
+    if padding == 'same':
+        images, paddings = same_padding(images, ksizes, strides, rates)
+    elif padding == 'valid':
+        pass
+    else:
+        raise NotImplementedError('Unsupported padding type: {}.\
+                Only "same" or "valid" are supported.'.format(padding))
+
+    unfold = torch.nn.Unfold(kernel_size=ksizes,
+                             padding=0,
+                             stride=strides)
+    patches = unfold(images)
+    return patches, paddings
+
+
 def extract_image_patches(images, ksizes, strides, rates, padding='same', region=None):
     """
     Extract patches from images and put them in the C output dimension.
@@ -133,8 +163,8 @@ class ContextualAttention_Enhance(nn.Module):
         kernel = self.ksize
         vshape = b1.shape
         ps = self.ksize
-        stride0 = 4#self.stride_1
-        stride1 = 1#self.stride_2
+        stride0 = self.stride_1 # 4
+        stride1 = self.stride_2 # 1
         chnls = b2.shape[1]
         dil,adj,pt = 1,0,1
         use_search_abs = ws == -1
@@ -183,6 +213,7 @@ class ContextualAttention_Enhance(nn.Module):
                                        adj=0,only_full=False,border="zero")
         fflow = optional(flows,'fflow',None)
         bflow = optional(flows,'bflow',None)
+        # print(ws,wt,k)
         xsearch = dnls.xsearch.CrossSearchNl(fflow, bflow, k, ps, pt, ws, wt,
                                              oh0, ow0, oh1, ow1, chnls=-1,
                                              dilation=dil, stride=stride1,
@@ -614,28 +645,25 @@ class ContextualAttention_Enhance(nn.Module):
         raw_int_bs = list(b1.size())  # b*c*h*w
         region = region
 
-        patch_28, paddings_28 = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
+        patch_28, paddings_28 = extract_image_patches_og(b1, ksizes=[self.ksize, self.ksize],
                                                       strides=[self.stride_1, self.stride_1],
-                                                      rates=[1, 1],
-                                                      padding='same',region=region)
+                                                      rates=[1, 1],padding='same')
         # print("patch_28.shape: ",patch_28.shape)
         patch_28 = patch_28.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_28 = patch_28.permute(0, 4, 1, 2, 3)
         patch_28_group = torch.split(patch_28, 1, dim=0)
 
-        patch_112, paddings_112 = extract_image_patches(b2, ksizes=[self.ksize, self.ksize],
+        patch_112, paddings_112 = extract_image_patches_og(b2, ksizes=[self.ksize, self.ksize],
                                                         strides=[self.stride_2, self.stride_2],
-                                                        rates=[1, 1],
-                                                        padding='same',region=region)
+                                                        rates=[1, 1],padding='same')
         # print("patch_112.shape: ",patch_112.shape)
         patch_112 = patch_112.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_112 = patch_112.permute(0, 4, 1, 2, 3)
         patch_112_group = torch.split(patch_112, 1, dim=0)
 
-        patch_112_2, paddings_112_2 = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
+        patch_112_2, paddings_112_2 = extract_image_patches_og(b3, ksizes=[self.ksize, self.ksize],
                                                         strides=[self.stride_2, self.stride_2],
-                                                        rates=[1, 1],
-                                                        padding='same',region=None)
+                                                        rates=[1, 1],padding='same')
 
 
         patch_112_2 = patch_112_2.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)

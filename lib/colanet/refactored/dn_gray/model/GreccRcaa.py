@@ -169,7 +169,7 @@ class CES(nn.Module):
         self.ws = 29
         self.wt = 0
         self.k = 100
-        self.exact = True
+        self.exact = False
 
     def forward(self, x, region=None, flows=None):
         out = self.c1(x,region,self.ca_forward_type,flows,self.exact,self.ws,self.wt,self.k)

@@ -55,6 +55,9 @@ def run_exp(cfg):
     model.eval()
     imax = 255.
     model.model.body[8].ca_forward_type = cfg.ca_fwd
+    model.model.body[8].ws = cfg.ws
+    model.model.body[8].wt = cfg.wt
+    model.model.body[8].k = cfg.k
     model.chop = cfg.ca_fwd == "default"
 
     # -- optional load trained weights --
@@ -185,12 +188,11 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
     # -- read cache --
     results = cache.load_exp(cfg) # possibly load result
     if ca_fwd == "dnls_k":
-        # model_path = "output/checkpoints/70744b81-5098-43fc-affd-4b1be55931ac-epoch=96-val_loss=5.03e-01.ckpt"
-        model_path = "output/checkpoints/4eaaea37-80e3-4f0c-945b-2be17a3be3c3-epoch=08-val_loss=3.30e-03.ckpt"
+        model_path = "output/checkpoints/bdf27594-c94e-48fc-b88f-09360531ab01-epoch=48-val_loss=4.45e-04.ckpt"
+        # model_path = "output/checkpoints/bdf27594-c94e-48fc-b88f-09360531ab01-epoch=87-val_loss=8.24e-04.ckpt"
     elif ca_fwd == "default":
-        model_path = "output/checkpoints/4eaaea37-80e3-4f0c-945b-2be17a3be3c3-epoch=08-val_loss=3.30e-03.ckpt"
-        # model_path = "output/checkpoints/4eaaea37-80e3-4f0c-945b-2be17a3be3c3-epoch=63-val_loss=3.45e-03.ckpt"
-        # model_path = "output/checkpoints/70744b81-5098-43fc-affd-4b1be55931ac-epoch=96-val_loss=5.03e-01.ckpt"
+        model_path = "output/checkpoints/bdf27594-c94e-48fc-b88f-09360531ab01-epoch=87-val_loss=8.24e-04.ckpt"
+        # model_path = "output/checkpoints/dd6dfc5a-75eb-42ea-9fcf-5d6952c8d52e-epoch=87-val_loss=5.56e-04.ckpt"
     else:
         raise ValueError(f"Uknown ca_fwd [{ca_fwd}]")
 
@@ -199,6 +201,11 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
     lightning.remove_lightning_load_state(state)
     model.model.load_state_dict(state)
     return model
+
+def save_path_from_cfg(cfg):
+    path = Path(cfg.dname) / cfg.vid_name
+    train_str = "train" if  cfg.train == "true" else "notrain"
+    path = path / "%s_%s" % (cfg.ca_fwd,train_str)
 
 def main():
 
@@ -223,20 +230,20 @@ def main():
 
     # -- get mesh --
     dnames = ["set8"]
-    vid_names = ["tractor"]
-    # vid_names = ["snowboard","sunflower","tractor","motorbike",
-    #              "hypersmooth","park_joy","rafting","touchdown"]
+    vid_names,sigmas = ["rafting"],[50.]
+    vid_names = ["snowboard","sunflower","tractor","motorbike",
+                 "hypersmooth","park_joy","rafting","touchdown"]
     internal_adapt_nsteps = [300]
     internal_adapt_nepochs = [0]
-    ws,wt,sigmas = [10],[5],[50.]
+    ws,wt,k = [20],[5],[150]
     flow,isizes,adapt_mtypes = ["true"],["none"],["rand"]
     ca_fwd_list,use_train = ["dnls_k"],["true"]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "internal_adapt_nsteps":internal_adapt_nsteps,
                  "internal_adapt_nepochs":internal_adapt_nepochs,
                  "flow":flow,"ws":ws,"wt":wt,"adapt_mtype":adapt_mtypes,
-                 "isize":isizes,"use_train":use_train,
-                 "ca_fwd":ca_fwd_list}
+                 "isize":isizes,"use_train":use_train,"ca_fwd":ca_fwd_list,
+                 "ws":ws,"wt":wt,"k":k}
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
     cache_io.append_configs(exps_a,cfg) # merge the two
 
@@ -278,7 +285,7 @@ def main():
     # -- viz report --
     for use_train,tdf in records.groupby("use_train"):
         for ca_group,gdf in tdf.groupby("ca_fwd"):
-            agg_psnrs,agg_ssims = [],[]
+            agg_psnrs,agg_ssims,agg_mem = [],[],[]
             for vname,vdf in gdf.groupby("vid_name"):
                 psnrs = np.stack(vdf['psnrs'])
                 dtime = np.stack(vdf['timer_deno'])
@@ -286,11 +293,13 @@ def main():
                 ssims = np.stack(vdf['ssims'])
                 psnr_mean = psnrs.mean().item()
                 ssim_mean = ssims.mean().item()
-                print(dtime,mem_gb)
+
+                # print(dtime,mem_gb)
                 # print(vname,psnr_mean,ssim_mean)
+                agg_mem.append(mem_gb.mean().item())
                 agg_psnrs.append(psnr_mean)
                 agg_ssims.append(ssim_mean)
-            print(ca_group)
+            print(ca_group,use_train)
             psnr_mean = np.mean(agg_psnrs)
             ssim_mean = np.mean(agg_ssims)
             uuid = gdf['uuid']
