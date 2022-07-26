@@ -5,6 +5,9 @@ Default Configs for Training/Testing
 """
 
 # -- easy dict --
+import random
+import numpy as np
+import torch as th
 from easydict import EasyDict as edict
 
 def default_test_vid_cfg():
@@ -20,6 +23,7 @@ def default_test_vid_cfg():
     cfg.device = "cuda:0"
     cfg.mtype = "gray"
     cfg.bw = True
+    cfg.seed = 123
     return cfg
 
 
@@ -31,6 +35,8 @@ def default_train_cfg():
     cfg.num_workers = 2
     cfg.device = "cuda:0"
     cfg.batch_size = 1
+    cfg.batch_size_val = 1
+    cfg.batch_size_te = 1
     cfg.saved_dir = "./output/saved_results/"
     cfg.device = "cuda:0"
     cfg.dname = "davis"
@@ -45,6 +51,10 @@ def default_train_cfg():
     cfg.ensemble = "false"
     cfg.log_root = "./output/log"
     cfg.cropmode = "region_sobel"
+    cfg.seed = 123
     return cfg
 
-
+def set_seed(seed):
+    random.seed(seed)
+    th.manual_seed(seed)
+    np.random.seed(seed)

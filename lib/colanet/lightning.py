@@ -115,9 +115,42 @@ class ColaNetLit(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
 
+        # -- each sample in batch --
+        loss = 0 # init @ zero
+        nbatch = len(batch['noisy'])
+        denos,cleans = [],[]
+        for i in range(nbatch):
+            deno_i,clean_i,loss_i = self.training_step_i(batch, i)
+            loss += loss_i
+            denos.append(deno_i)
+            cleans.append(clean_i)
+        loss = loss / nbatch
+
+        # -- append --
+        denos = th.stack(denos)
+        cleans = th.stack(cleans)
+
+        # -- log --
+        self.log("train_loss", loss.item(), on_step=True,
+                 on_epoch=False,batch_size=self.batch_size)
+
+        # -- terminal log --
+        val_psnr = np.mean(compute_psnrs(denos,cleans,div=1.)).item()
+        self.gen_loger.info("train_psnr: %2.2f" % val_psnr)
+        # print("train_psnr: %2.2f" % val_psnr)
+        self.log("train_loss", loss.item(), on_step=True,
+                 on_epoch=False, batch_size=self.batch_size)
+
+        return loss
+
+    def training_step_i(self, batch, i):
+
+        # -- unpack batch
+        noisy = batch['noisy'][i]/255.
+        clean = batch['clean'][i]/255.
+        region = batch['region'][i]
+
         # -- get data --
-        noisy,clean = batch['noisy'][0]/255.,batch['clean'][0]/255.
-        region = batch['region'][0]
         noisy = rslice(noisy,region)
         clean = rslice(clean,region)
 
@@ -126,18 +159,7 @@ class ColaNetLit(pl.LightningModule):
 
         # -- report loss --
         loss = th.mean((clean - deno)**2)
-        self.log("train_loss", loss.item(), on_step=True,
-                 on_epoch=False,batch_size=self.batch_size)
-
-        # -- terminal log --
-        val_psnr = np.mean(compute_psnrs(deno,clean,div=1.)).item()
-        self.gen_loger.info("train_psnr: %2.2f" % val_psnr)
-        # print("train_psnr: %2.2f" % val_psnr)
-        self.log("train_loss", loss.item(), on_step=True,
-                 on_epoch=False, batch_size=self.batch_size)
-
-        # -- update --
-        return loss
+        return deno.detach(),clean,loss
 
     def validation_step(self, batch, batch_idx):
 

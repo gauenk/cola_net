@@ -1,7 +1,7 @@
 
 # -- misc --
 import os,math,tqdm
-import pprint
+import pprint,random
 pp = pprint.PrettyPrinter(indent=4)
 
 # -- linalg --
@@ -35,6 +35,9 @@ def run_exp(cfg):
     # -- set device --
     th.cuda.set_device(int(cfg.device.split(":")[1]))
 
+    # -- set seed --
+    configs.set_seed(cfg.seed)
+
     # -- init results --
     results = edict()
     results.psnrs = []
@@ -58,6 +61,7 @@ def run_exp(cfg):
     model.model.body[8].ws = cfg.ws
     model.model.body[8].wt = cfg.wt
     model.model.body[8].k = cfg.k
+    model.model.body[8].sb = cfg.sb
     model.chop = cfg.ca_fwd == "default"
 
     # -- optional load trained weights --
@@ -188,11 +192,12 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
     # -- read cache --
     results = cache.load_exp(cfg) # possibly load result
     if ca_fwd == "dnls_k":
-        model_path = "output/checkpoints/bdf27594-c94e-48fc-b88f-09360531ab01-epoch=48-val_loss=4.45e-04.ckpt"
-        # model_path = "output/checkpoints/bdf27594-c94e-48fc-b88f-09360531ab01-epoch=87-val_loss=8.24e-04.ckpt"
+        # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=99.ckpt"
+        # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=81-val_loss=1.24e-03.ckpt"
+        model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=38-val_loss=1.15e-03.ckpt"
+        # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=26.ckpt"
     elif ca_fwd == "default":
-        model_path = "output/checkpoints/bdf27594-c94e-48fc-b88f-09360531ab01-epoch=87-val_loss=8.24e-04.ckpt"
-        # model_path = "output/checkpoints/dd6dfc5a-75eb-42ea-9fcf-5d6952c8d52e-epoch=87-val_loss=5.56e-04.ckpt"
+        model_path = "output/checkpoints/dec78611-36a7-4a9e-8420-4e60fe8ea358-epoch=91-val_loss=6.63e-04.ckpt"
     else:
         raise ValueError(f"Uknown ca_fwd [{ca_fwd}]")
 
@@ -218,37 +223,38 @@ def main():
     cache_dir = ".cache_io"
     cache_name = "test_rgb_net" # current!
     cache = cache_io.ExpCache(cache_dir,cache_name)
-    cache.clear()
+    # cache.clear()
 
     # -- get defaults --
     cfg = configs.default_test_vid_cfg()
     cfg.isize = "none"#"128_128"
     cfg.bw = True
     cfg.nframes = 4
-    cfg.frame_start = 0
-    cfg.frame_end = cfg.nframes-1
+    cfg.frame_start = 10
+    cfg.frame_end = cfg.frame_start+cfg.nframes-1
 
     # -- get mesh --
-    dnames = ["set8"]
-    vid_names,sigmas = ["rafting"],[50.]
+    dnames,sigmas = ["set8"],[50.]
+    vid_names = ["sunflower","hypersmooth","tractor"]
     vid_names = ["snowboard","sunflower","tractor","motorbike",
                  "hypersmooth","park_joy","rafting","touchdown"]
     internal_adapt_nsteps = [300]
     internal_adapt_nepochs = [0]
-    ws,wt,k = [20],[5],[150]
-    flow,isizes,adapt_mtypes = ["true"],["none"],["rand"]
+    ws,wt,k,sb = [20],[5],[100],[1024*32]
+    flow,isizes,adapt_mtypes = ["true","false"],["none"],["rand"]
     ca_fwd_list,use_train = ["dnls_k"],["true"]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "internal_adapt_nsteps":internal_adapt_nsteps,
                  "internal_adapt_nepochs":internal_adapt_nepochs,
                  "flow":flow,"ws":ws,"wt":wt,"adapt_mtype":adapt_mtypes,
                  "isize":isizes,"use_train":use_train,"ca_fwd":ca_fwd_list,
-                 "ws":ws,"wt":wt,"k":k}
+                 "ws":ws,"wt":wt,"k":k, "sb":sb}
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
     cache_io.append_configs(exps_a,cfg) # merge the two
 
     # -- original w/out training --
-    exp_lists['use_train'] = ["false"]
+    exp_lists['flow'] = ["false"]
+    exp_lists['use_train'] = ["false"]#,"true"]
     exp_lists['ca_fwd'] = ["default"]
     exps_b = cache_io.mesh_pydicts(exp_lists) # create mesh
     cfg.bw = True
@@ -270,7 +276,8 @@ def main():
 
         # -- logic --
         uuid = cache.get_uuid(exp) # assing ID to each Dict in Meshgrid
-        # cache.clear_exp(uuid)
+        # if exp.ca_fwd == "dnls_k":
+        #     cache.clear_exp(uuid)
         results = cache.load_exp(exp) # possibly load result
         if results is None: # check if no result
             exp.uuid = uuid
@@ -285,25 +292,32 @@ def main():
     # -- viz report --
     for use_train,tdf in records.groupby("use_train"):
         for ca_group,gdf in tdf.groupby("ca_fwd"):
-            agg_psnrs,agg_ssims,agg_mem = [],[],[]
-            for vname,vdf in gdf.groupby("vid_name"):
-                psnrs = np.stack(vdf['psnrs'])
-                dtime = np.stack(vdf['timer_deno'])
-                mem_gb = np.stack(vdf['mem_gb'])
-                ssims = np.stack(vdf['ssims'])
-                psnr_mean = psnrs.mean().item()
-                ssim_mean = ssims.mean().item()
+            for use_flow,fdf in gdf.groupby("flow"):
+                agg_psnrs,agg_ssims,agg_mem,agg_dtime = [],[],[],[]
+                print("--- %s (%s,%s) ---" % (ca_group,use_train,use_flow))
+                for vname,vdf in fdf.groupby("vid_name"):
+                    psnrs = np.stack(vdf['psnrs'])
+                    dtime = np.stack(vdf['timer_deno'])
+                    mem_gb = np.stack(vdf['mem_gb'])
+                    ssims = np.stack(vdf['ssims'])
+                    psnr_mean = psnrs.mean().item()
+                    ssim_mean = ssims.mean().item()
+                    uuid = vdf['uuid'].iloc[0]
 
-                # print(dtime,mem_gb)
-                # print(vname,psnr_mean,ssim_mean)
-                agg_mem.append(mem_gb.mean().item())
-                agg_psnrs.append(psnr_mean)
-                agg_ssims.append(ssim_mean)
-            print(ca_group,use_train)
-            psnr_mean = np.mean(agg_psnrs)
-            ssim_mean = np.mean(agg_ssims)
-            uuid = gdf['uuid']
-            print(psnr_mean,ssim_mean,uuid)
+                    # print(dtime,mem_gb)
+                    # print(vname,psnr_mean,ssim_mean,uuid)
+                    print("%13s: %2.3f %1.3f %s" % (vname,psnr_mean,ssim_mean,uuid))
+                    agg_psnrs.append(psnr_mean)
+                    agg_ssims.append(ssim_mean)
+                    agg_mem.append(mem_gb.mean().item())
+                    agg_dtime.append(dtime.mean().item())
+                psnr_mean = np.mean(agg_psnrs)
+                ssim_mean = np.mean(agg_ssims)
+                dtime_mean = np.mean(agg_dtime)
+                mem_mean = np.mean(agg_mem)
+                uuid = tdf['uuid']
+                params = ("Ave",psnr_mean,ssim_mean,dtime_mean,mem_mean)
+                print("%13s: %2.3f %1.3f %2.3f %2.3f" % params)
 
 
 if __name__ == "__main__":

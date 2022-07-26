@@ -47,6 +47,9 @@ def launch_training(cfg):
     #
     # -=-=-=-=-=-=-=-=-
 
+    # -- set seed --
+    configs.set_seed(cfg.seed)
+
     # -- create timer --
     timer = ExpTimer()
 
@@ -108,11 +111,14 @@ def launch_training(cfg):
     chkpt_fn = cfg.uuid + "-{epoch:02d}-{val_loss:2.2e}"
     checkpoint_callback = ModelCheckpoint(monitor="val_loss",save_top_k=10,mode="min",
                                           dirpath=cfg.checkpoint_dir,filename=chkpt_fn)
+    chkpt_fn = cfg.uuid + "-{epoch:02d}"
+    cc_recent = ModelCheckpoint(monitor="epoch",save_top_k=10,mode="max",
+                                dirpath=cfg.checkpoint_dir,filename=chkpt_fn)
     swa_callback = StochasticWeightAveraging(swa_lrs=1e-4)
     trainer = pl.Trainer(gpus=2,precision=32,limit_train_batches=1.,
                          max_epochs=cfg.nepochs-1,log_every_n_steps=1,
                          logger=logger,gradient_clip_val=0.5,
-                         callbacks=[checkpoint_callback,swa_callback])
+                         callbacks=[checkpoint_callback,swa_callback,cc_recent])
     timer.start("train")
     trainer.fit(model, loaders.tr, loaders.val)
     timer.stop("train")
@@ -190,8 +196,8 @@ def main():
     # -- create exp list --
     ws,wt,k = [20],[5],[100]
     sigmas = [50.]#,30.,10.]
-    isizes = ["128_128"]
     flow = ['true']
+    isizes = ["128_128"]
     ca_fwd_list = ["dnls_k"]
     exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"k":k,
                  "isize":isizes,"ca_fwd":ca_fwd_list,'flow':flow}
@@ -216,9 +222,11 @@ def main():
 
     # -- group with default --
     cfg = configs.default_train_cfg()
-    cfg.nsamples_tr = 100
+    cfg.nsamples_tr = 400
+    cfg.nsamples_val = 30
     cfg.nepochs = 100
     cfg.persistent_workers = True
+    cfg.batch_size = 4
     cache_io.append_configs(exps,cfg) # merge the two
 
     # -- launch each experiment --

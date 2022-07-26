@@ -169,13 +169,14 @@ class CES(nn.Module):
         self.ws = 29
         self.wt = 0
         self.k = 100
+        self.sb = None
         self.exact = False
 
     def forward(self, x, region=None, flows=None):
-        out = self.c1(x,region,self.ca_forward_type,flows,self.exact,self.ws,self.wt,self.k)
+        out = self.c1(x,region,self.ca_forward_type,flows,self.exact,self.ws,self.wt,self.k,self.sb)
         out = self.RBS1(out)
-        out = self.c2(out,region,self.ca_forward_type,flows,self.exact,self.ws,self.wt,self.k)
+        out = self.c2(out,region,self.ca_forward_type,flows,self.exact,self.ws,self.wt,self.k,self.sb)
         out = self.RBS2(out)
-        out = self.c3(out,region,self.ca_forward_type,flows,self.exact,self.ws,self.wt,self.k)
+        out = self.c3(out,region,self.ca_forward_type,flows,self.exact,self.ws,self.wt,self.k,self.sb)
         # print("[ces] out.shape: ",out.shape)
         return out

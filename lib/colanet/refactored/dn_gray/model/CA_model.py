@@ -149,7 +149,7 @@ class ContextualAttention_Enhance(nn.Module):
         self.phi = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
                              padding=0)
 
-    def dnls_k_forward(self, b, region=None, flows=None, exact=False, ws=29, wt=0, k=100):
+    def dnls_k_forward(self, b, region=None, flows=None, exact=False, ws=29, wt=0, k=100,sb=None):
 
         # -- get images --
         b1 = self.g(b)
@@ -188,12 +188,17 @@ class ContextualAttention_Enhance(nn.Module):
         # -- batching params --
         nh = (cr_h-1)//stride0+1
         nw = (cr_w-1)//stride0+1
+        npix = h * w
         ntotal = t * nh * nw
-        bdiv = t if self.training else 1
-        nbatch = ntotal//(t*bdiv)
+        # bdiv = t if self.training else 1
+        # nbatch = ntotal//(t*bdiv)
         # nbatch = min(nbatch,4096)
         # nbatch = min(nbatch,4096*2)
-        nbatch = ntotal//t
+        if sb is None:
+            div = 2 if npix >= (540 * 960) else 1
+            nbatch = ntotal//(t*div)
+        else:
+            nbatch = sb
         # nbatch = nbatch if use_k else min(nbatch,2048)
         nbatches = (ntotal-1) // nbatch + 1
         # ws,wt = -1,0
@@ -223,7 +228,7 @@ class ContextualAttention_Enhance(nn.Module):
                                             reflect_bounds=reflect_bounds, adj=0, exact=exact)
 
         # -- misc --
-        raw_int_bs = list(b1.size())  # b*c*h*w
+        # raw_int_bs = list(b1.size())  # b*c*h*w
 
         # patch_28, paddings_28 = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
         #                                               strides=[self.stride_1, self.stride_1],
@@ -234,13 +239,13 @@ class ContextualAttention_Enhance(nn.Module):
         # patch_28 = patch_28.permute(0, 4, 1, 2, 3)
         # patch_28_group = torch.split(patch_28, 1, dim=0)
 
-        patch_112, paddings_112 = extract_image_patches(b2, ksizes=[self.ksize, self.ksize],
-                                                        strides=[self.stride_2, self.stride_2],
-                                                        rates=[1, 1],padding='same',region=None)
+        # patch_112, paddings_112 = extract_image_patches(b2, ksizes=[self.ksize, self.ksize],
+        #                                                 strides=[self.stride_2, self.stride_2],
+        #                                                 rates=[1, 1],padding='same',region=None)
         # print("patch_112.shape: ",patch_112.shape)
-        patch_112 = patch_112.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
-        patch_112 = patch_112.permute(0, 4, 1, 2, 3)
-        patch_112_group = torch.split(patch_112, 1, dim=0)
+        # patch_112 = patch_112.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
+        # patch_112 = patch_112.permute(0, 4, 1, 2, 3)
+        # patch_112_group = torch.split(patch_112, 1, dim=0)
 
         # patch_112_2, paddings_112_2 = extract_image_patches(b3, ksizes=[self.ksize, self.ksize],
         #                                                 strides=[self.stride_2, self.stride_2],
