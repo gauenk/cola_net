@@ -91,6 +91,7 @@ class ColaNetLit(pl.LightningModule):
             deno = model.forward_chop(vid,flows=flows)
         else:
             deno = self.net(vid,flows=flows)
+        deno = th.clamp(deno,0.,1.)
         return deno
 
     def _get_flow(self,vid):
