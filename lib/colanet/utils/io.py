@@ -1,7 +1,7 @@
 # -- linalg --
 import torch as th
 import numpy as np
-from einops import rearrange
+from einops import rearrange,repeat
 
 # -- file io --
 from PIL import Image
