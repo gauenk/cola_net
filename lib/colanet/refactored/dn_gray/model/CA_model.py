@@ -92,8 +92,8 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same', region
     stride = strides[0]
     coords = [0,0,h,w] if (region is None) else region[2:]
     adj = 0
-    unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,
-                                  adj=adj,only_full=False,border="zero")
+    unfold = dnls.iUnfold(ksize,coords,stride=stride,dilation=1,
+                          adj=adj,only_full=False,border="zero")
     patches = unfold(images)
     patches_a = rearrange(patches,'(t n) 1 1 c h w -> t (c h w) n',t=t)
     patches = patches_a
@@ -207,25 +207,26 @@ class ContextualAttention_Enhance(nn.Module):
         oh0,ow0,oh1,ow1 = 1,1,3,3
 
         # -- define functions --
-        ifold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
+        ifold = dnls.iFoldz(vshape,region,stride=stride0,dilation=dil,
                                  adj=0,only_full=False,use_reflect=False,
                                  device=device)
-        wfold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
-                                 adj=0,only_full=False,use_reflect=False,
-                                 device=device)
+        # wfold = dnls.iFold(vshape,region,stride=stride0,dilation=dil,
+        #                          adj=0,only_full=False,use_reflect=False,
+        #                          device=device)
         # scatter = dnls.scatter.ScatterNl(ps,pt,exact=exact,adj=0,reflect_bounds=False)
-        iunfold = dnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,
-                                       adj=0,only_full=False,border="zero")
+        iunfold = dnls.iUnfold(ps,region,stride=stride1,dilation=dil,
+                               adj=0,only_full=False,border="zero")
         fflow = optional(flows,'fflow',None)
         bflow = optional(flows,'bflow',None)
         # print(ws,wt,k)
-        xsearch = dnls.xsearch.CrossSearchNl(fflow, bflow, k, ps, pt, ws, wt,
-                                             oh0, ow0, oh1, ow1, chnls=-1,
-                                             dilation=dil, stride=stride1,
-                                             reflect_bounds=False, use_k=use_k,use_adj=True,
-                                             use_search_abs=use_search_abs, exact=exact)
-        wpsum = dnls.wpsum.WeightedPatchSum(ps, pt, h_off=0, w_off=0, dilation=dil,
-                                            reflect_bounds=reflect_bounds, adj=0, exact=exact)
+        xsearch = dnls.search.init("prod_with_index",fflow, bflow, k, ps, pt, ws, wt,
+                                   oh0, ow0, oh1, ow1, chnls=-1,
+                                   dilation=dil, stride0=stride0,stride1=stride1,
+                                   reflect_bounds=False, use_k=use_k,use_adj=True,
+                                   use_search_abs=use_search_abs, exact=exact)
+        wpsum = dnls.reducers.WeightedPatchSum(ps, pt, h_off=0, w_off=0, dilation=dil,
+                                               reflect_bounds=reflect_bounds,
+                                               adj=0, exact=exact)
 
         # -- misc --
         # raw_int_bs = list(b1.size())  # b*c*h*w
@@ -267,14 +268,15 @@ class ContextualAttention_Enhance(nn.Module):
             nbatch_i =  min(nbatch, ntotal - qindex)
 
             # -- get patches --
-            iqueries = dnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride0,
-                                                        region,t,device=device)
-            th.cuda.synchronize()
+            # iqueries = dnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride0,
+            #                                             region,t,device=device)
+            # th.cuda.synchronize()
 
             # -- search --
             # print(iqueries)
             timer.start("xsearch")
-            dists,inds = xsearch(b1,iqueries,b3)
+            # dists,inds = xsearch(b1,iqueries,b3)
+            dists,inds = xsearch(b1,qindex,nbatch_i,b3)
             # print("ref: ",dists[:3,:3])
             # print("dists.shape: ",dists.shape)
 
@@ -296,7 +298,7 @@ class ContextualAttention_Enhance(nn.Module):
 
             # -- get top k patches --
             # yi = yi.detach()
-            zi = wpsum(b2,yi,inds).view(iqueries.shape[0],-1)
+            zi = wpsum(b2,yi,inds).view(nbatch_i,-1)
             # print(zi.shape)
 
             #
@@ -373,16 +375,17 @@ class ContextualAttention_Enhance(nn.Module):
             timer.start("fold")
             # print("zi.shape: ",zi.shape)
             _zi = rearrange(zi,'n (c h w) -> n 1 1 c h w',h=ps,w=ps)
-            ones = th.ones_like(_zi)
+            # ones = th.ones_like(_zi)
             ifold(_zi,qindex)
-            wfold(ones,qindex)
+            # wfold(ones,qindex)
             # th.cuda.synchronize()
             timer.stop("fold")
             # print(timer)
 
         # -- get post-attn vid --
-        y = ifold.vid
-        Z = wfold.vid
+        y,Z = ifold.vid,ifold.zvid
+        # y = ifold.vid
+        # Z = wfold.vid
         # y = th.cat(agg)
         # Z = th.cat(wagg)
         # print("[final] y.shape: ",y.shape)
@@ -445,12 +448,12 @@ class ContextualAttention_Enhance(nn.Module):
         oh0,ow0,oh1,ow1 = 1,1,3,3
 
         # -- define functions --
-        ifold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
+        ifold = dnls.iFoldz(vshape,region,stride=stride0,dilation=dil,
                                  adj=0,only_full=False,use_reflect=False)
-        wfold = dnls.ifold.iFold(vshape,region,stride=stride0,dilation=dil,
-                                 adj=0,only_full=False,use_reflect=False)
-        iunfold = dnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,
-                                       adj=adj,only_full=False,border="zero")
+        # wfold = dnls.iFold(vshape,region,stride=stride0,dilation=dil,
+        #                          adj=0,only_full=False,use_reflect=False)
+        iunfold = dnls.iUnfold(ps,region,stride=stride1,dilation=dil,
+                               adj=adj,only_full=False,border="zero")
         # iunfold = dnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,adj=True)
         fflow = optional(flows,'fflow',None)
         bflow = optional(flows,'bflow',None)
