@@ -124,10 +124,8 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same', region
 CA network
 """
 class ContextualAttention_Enhance(nn.Module):
-    def __init__(self, ksize=7, stride_1=4, stride_2=1, softmax_scale=10,
-                 shape=64 ,p_len=64,in_channels=64,
-                 inter_channels=16,use_multiple_size=False,
-                 use_topk=False,add_SE=False,refine_k=0):
+    def __init__(self, ksize=7, stride_1=4, stride_2=1, softmax_scale=10,shape=64 ,p_len=64,in_channels=64
+                 , inter_channels=16,use_multiple_size=False,use_topk=False,add_SE=False):
         super(ContextualAttention_Enhance, self).__init__()
         self.ksize = ksize
         self.shape=shape
@@ -140,7 +138,6 @@ class ContextualAttention_Enhance(nn.Module):
         self.use_multiple_size=use_multiple_size
         self.use_topk=use_topk
         self.add_SE=add_SE
-        self.refine_k = refine_k
         # self.SE=SE_net(in_channels=in_channels)
         self.conv33=nn.Conv2d(in_channels=2*in_channels,out_channels=in_channels,kernel_size=1,stride=1,padding=0)
         self.g = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
@@ -152,7 +149,7 @@ class ContextualAttention_Enhance(nn.Module):
         self.phi = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
                              padding=0)
 
-    def dnls_k_forward(self, b, region=None, flows=None, exact=False, ws=29, wt=0, k=100,sb=None,rand_bwd=True,ws_r=1,inds_prev=None):
+    def dnls_k_forward(self, b, region=None, flows=None, exact=False, ws=29, wt=0, k=100,sb=None,rand_bwd=True):
 
         # -- get images --
         b1 = self.g(b)
@@ -224,21 +221,12 @@ class ContextualAttention_Enhance(nn.Module):
         bflow = optional(flows,'bflow',None)#[None,:]
 
         # print(ws,wt,k)
-        if inds_prev is None:
-            xsearch = dnls.search.init("prod_with_index", fflow, bflow,
-                                       k, ps, pt, ws, wt,
-                                       oh0, ow0, oh1, ow1, chnls=-1,
-                                       dilation=dil, stride0=stride0,stride1=stride1,
-                                       reflect_bounds=False, use_k=use_k,use_adj=True,
-                                       search_abs=search_abs,rbwd=rand_bwd,exact=exact)
-        else:
-            xsearch = dnls.search.init("prod_refine", inds_prev,
-                                       k, ps, pt, ws_r,
-                                       oh0, ow0, oh1, ow1, chnls=-1,
-                                       dilation=dil, stride0=stride0,stride1=stride1,
-                                       reflect_bounds=False, use_k=use_k,use_adj=True,
-                                       search_abs=search_abs,rbwd=rand_bwd,exact=exact)
-
+        xsearch = dnls.search.init("prod_with_index", fflow, bflow,
+                                   k, ps, pt, ws, wt,
+                                   oh0, ow0, oh1, ow1, chnls=-1,
+                                   dilation=dil, stride0=stride0,stride1=stride1,
+                                   reflect_bounds=False, use_k=use_k,use_adj=True,
+                                   search_abs=search_abs,rbwd=rand_bwd,exact=exact)
         wpsum = dnls.reducers.WeightedPatchSum(ps, pt, h_off=0, w_off=0,
                                                dilation=dil,
                                                reflect_bounds=reflect_bounds,

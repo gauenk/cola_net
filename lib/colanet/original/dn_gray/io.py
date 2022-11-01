@@ -3,7 +3,6 @@ import torch as th
 import numpy as np
 from pathlib import Path
 from easydict import EasyDict as edict
-
 from .model import Model
 
 def select_sigma(sigma):

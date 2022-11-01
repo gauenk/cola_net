@@ -154,17 +154,18 @@ def test_original_refactored(sigma):
     og_model = colanet.original.load_model(mtype,sigma).eval()
     og_model.chop = chop
     og_model.eval()
-    timer.start("original")
 
     gpu_mem.reset_peak_gpu_stats()
+    timer.start("original")
     with th.no_grad():
         deno_og = og_model(noisy_og,0,ensemble=ensemble).detach()
-    gpu_mem.print_peak_gpu_stats(True,"og",reset=True)
     # og_model.train()
     # deno_og = og_model(noisy,0,ensemble=ensemble)
     # loss = th.sum((deno_og - clean)**2).sum()
     # loss.backward()
     timer.stop("original")
+    gpu_mem.print_peak_gpu_stats(True,"og",reset=True)
+
 
     # -- each version --
     t,c,h,w = noisy.shape

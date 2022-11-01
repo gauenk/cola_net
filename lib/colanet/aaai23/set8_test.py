@@ -53,10 +53,10 @@ def append_detailed_cfg(cfg):
 def load_proposed(cfg,use_train="true",flow="true"):
     use_chop = "false"
     ca_fwd = "dnls_k"
-    sb = 256
+    sb = 48*1024
     return load_results(ca_fwd,use_train,use_chop,flow,sb,cfg)
 
-def load_original(cfg,use_chop="false"):
+def load_original(cfg,use_chop="true"):
     flow = "false"
     use_train = "false"
     ca_fwd = "default"
@@ -66,8 +66,8 @@ def load_original(cfg,use_chop="false"):
 def load_results(ca_fwd,use_train,use_chop,flow,sb,cfg):
 
     # -- get cache --
-    lidia_home = Path(__file__).parents[0] / "../../../"
-    cache_dir = str(lidia_home / ".cache_io")
+    colanet_home = Path(__file__).parents[0] / "../../../"
+    cache_dir = str(colanet_home / ".cache_io")
     cache_name = "test_rgb_net" # current!
     cache = cache_io.ExpCache(cache_dir,cache_name)
 
@@ -78,9 +78,11 @@ def load_results(ca_fwd,use_train,use_chop,flow,sb,cfg):
     cfg.use_train = use_train
     cfg.use_chop = use_chop
     cfg.sb = sb
+    cfg.frame_end = -1
 
     # -- load results --
     cfg_l = [cfg]
     pp.pprint(cfg_l[0])
     records = cache.load_flat_records(cfg_l)
+    records['home_path'] = colanet_home
     return records

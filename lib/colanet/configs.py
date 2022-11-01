@@ -18,12 +18,14 @@ def default_test_vid_cfg():
     cfg.frame_end = 0
     cfg.saved_dir = "./output/saved_results/"
     cfg.checkpoint_dir = "/home/gauenk/Documents/packages/colanet/output/checkpoints/"
-    cfg.isize = "128_128"#None
+    # cfg.isize = "128_128"#None
     cfg.num_workers = 1
     cfg.device = "cuda:0"
     cfg.mtype = "gray"
     cfg.bw = True
     cfg.seed = 123
+    cfg.internal_adapt_nsteps = 300
+    cfg.internal_adapt_nepochs = 0
     return cfg
 
 

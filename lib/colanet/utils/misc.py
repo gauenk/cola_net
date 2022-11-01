@@ -1,6 +1,7 @@
 
 import torch as th
 import pickle
+from easydict import EasyDict as edict
 
 def optional(pydict,key,default):
     if pydict is None: return default
@@ -23,6 +24,13 @@ def rslice(vid,coords):
         coords = list(coords.cpu().numpy())
     fs,fe,t,l,b,r = coords
     return vid[fs:fe,:,t:b,l:r]
+
+def slice_flows(flows,t_start,t_end):
+    if flows is None: return flows
+    flows_t = edict()
+    flows_t.fflow = flows.fflow[t_start:t_end]
+    flows_t.bflow = flows.bflow[t_start:t_end]
+    return flows_t
 
 def write_pickle(fn,obj):
     with open(str(fn),"wb") as f:

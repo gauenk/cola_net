@@ -28,8 +28,8 @@ import colanet.configs as configs
 import colanet.utils.gpu_mem as gpu_mem
 from colanet.utils.timer import ExpTimer
 from colanet.utils.metrics import compute_psnrs,compute_ssims
-from colanet.utils.misc import rslice,write_pickle,read_pickle
 from colanet.lightning import ColaNetLit,MetricsCallback
+from colanet.utils.misc import rslice,write_pickle,read_pickle,optional
 
 # -- lightning module --
 import torch
@@ -64,10 +64,11 @@ def launch_training(cfg):
         save_dir.mkdir(parents=True)
 
     # -- network --
+    rand_bwd = optional(cfg,'rand_bwd','true')
     model = ColaNetLit(cfg.mtype,cfg.sigma,cfg.batch_size,
                        cfg.flow=="true",cfg.ensemble=="true",
                        cfg.ca_fwd,cfg.isize,cfg.bw,
-                       cfg.ws,cfg.wt,cfg.k)
+                       cfg.ws,cfg.wt,cfg.k,rand_bwd=="true")
 
     # -- load dataset with testing mods isizes --
     model.isize = None
@@ -189,24 +190,28 @@ def main():
     # -- init --
     verbose = True
     cache_dir = ".cache_io"
-    cache_name = "train_rgb_net"
+    # cache_name = "train_rgb_net" # without "rand_bwd" option
+    cache_name = "train_rgb_net_with_rand_bwd"  # _with_ "rand_bwd"
     cache = cache_io.ExpCache(cache_dir,cache_name)
-    cache.clear()
+    # cache.clear()
 
     # -- create exp list --
-    ws,wt,k = [20],[5],[100]
-    sigmas = [50.]#,30.,10.]
-    flow = ['true']
+    ws,wt,k = [20],[3],[100]
+    sigmas = [40.]#,30.,10.]
+    flow = ['false']
     isizes = ["128_128"]
     ca_fwd_list = ["dnls_k"]
+    rand_bwd = ["false",]#"true","false"]
     exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"k":k,
-                 "isize":isizes,"ca_fwd":ca_fwd_list,'flow':flow}
+                 "isize":isizes,"ca_fwd":ca_fwd_list,'flow':flow,
+                 "rand_bwd":rand_bwd}# new and optional!
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
 
     # -- default --
     exp_lists['ca_fwd'] = ['default']
     exp_lists['flow'] = ['false']
     exp_lists['isize'] = ['128_128']
+    exp_lists['rand_bwd'] = ["false"]
     exps_b = cache_io.mesh_pydicts(exp_lists) # create mesh
 
     # -- try training "dnls_k" without flow --
@@ -224,7 +229,7 @@ def main():
     cfg = configs.default_train_cfg()
     cfg.nsamples_tr = 400
     cfg.nsamples_val = 30
-    cfg.nepochs = 100
+    cfg.nepochs = 40
     cfg.persistent_workers = True
     cfg.batch_size = 4
     cache_io.append_configs(exps,cfg) # merge the two

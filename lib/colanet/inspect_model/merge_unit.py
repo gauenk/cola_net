@@ -21,16 +21,15 @@ class merge_block(nn.Module):
 
     def forward(self, x, region=None, ca_forward_type="forward",
                 flows=None, exact=False, ws=29, wt=0, k=100, sb=None,
-                rand_bwd=True, inds_prev=None):
-        inds = None
+                rand_bwd=True):
         out1 = self.SKUnit(x)[:,None]
         if ca_forward_type in ["forward","default"]:
             out2 = self.CAUnit(x,region,flows,exact)[:,None]
         elif ca_forward_type == "dnls":
             out2 = self.CAUnit.dnls_forward(x,region,flows,exact)[:,None]
         elif ca_forward_type == "dnls_k":
-            out2,inds = self.CAUnit.dnls_k_forward(x,region,flows,exact,
-                                                   ws,wt,k,sb,rand_bwd,inds_prev)[:,None]
+            out2 = self.CAUnit.dnls_k_forward(x,region,flows,exact,
+                                              ws,wt,k,sb,rand_bwd)[:,None]
         else:
             raise ValueError(f"Uknown CrossAttn forward type [{ca_forward_type}]")
         out = torch.cat((out2,out1),dim=1)
@@ -42,4 +41,4 @@ class merge_block(nn.Module):
         vector = torch.cat((attention_vector_CA,attention_vector_SK),dim=1)
         vector = self.softmax(vector)[...,None,None]#.unsqueeze(-1).unsqueeze(-1)
         out = (out*vector).sum(dim=1)
-        return out,inds
+        return out

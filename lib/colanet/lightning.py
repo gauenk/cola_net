@@ -18,7 +18,8 @@ from easydict import EasyDict as edict
 import data_hub
 
 # -- optical flow --
-import svnlb
+# import svnlb
+from colanet import flow
 
 # -- caching results --
 import cache_io
@@ -48,7 +49,7 @@ class ColaNetLit(pl.LightningModule):
 
     def __init__(self,mtype,sigma,batch_size=1,flow=True,
                  ensemble=False,ca_fwd="dnls_k",isize=None,bw=False,
-                 ws=29,wt=0,k=100):
+                 ws=29,wt=0,k=100,rand_bwd=True):
         super().__init__()
         self.mtype = mtype
         self.sigma = sigma
@@ -61,6 +62,7 @@ class ColaNetLit(pl.LightningModule):
         self.net.body[8].wt = wt
         self.net.body[8].k = k
         self.net.body[8].exact = False
+        self.net.body[8].rand_bwd = rand_bwd
         self.batch_size = batch_size
         self.flow = flow
         self.isize = isize
@@ -96,11 +98,13 @@ class ColaNetLit(pl.LightningModule):
 
     def _get_flow(self,vid):
         if self.flow == True:
-            noisy_np = vid.cpu().numpy()
-            if noisy_np.shape[1] == 1:
-                noisy_np = np.repeat(noisy_np,3,axis=1)
-            flows = svnlb.compute_flow(noisy_np,self.sigma)
-            flows = edict({k:th.from_numpy(v).to(self.device) for k,v in flows.items()})
+            # noisy_np = vid.cpu().numpy()
+            # if noisy_np.shape[1] == 1:
+            #     noisy_np = np.repeat(noisy_np,3,axis=1)
+            # flows = svnlb.compute_flow(noisy_np,self.sigma)
+            # flows=edict({k:th.from_numpy(v).to(self.device) for k,v in flows.items()})
+            est_sigma = flow.est_sigma(vid)
+            flows = flow.run(vid,est_sigma)
         else:
             t,c,h,w = vid.shape
             zflows = th.zeros((t,2,h,w)).to(self.device)
@@ -174,7 +178,7 @@ class ColaNetLit(pl.LightningModule):
         gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
         with th.no_grad():
             deno = self.forward(noisy)
-        mem_gb = gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
+        mem_res,mem_alloc = gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
 
         # -- loss --
         loss = th.mean((clean - deno)**2)
@@ -182,8 +186,11 @@ class ColaNetLit(pl.LightningModule):
         # -- report --
         self.log("val_loss", loss.item(), on_step=False,
                  on_epoch=True,batch_size=1)
-        self.log("val_gpu_mem", mem_gb, on_step=False,
+        self.log("val_mem_res", mem_res, on_step=False,
                  on_epoch=True,batch_size=1)
+        self.log("val_mem_alloc", mem_alloc, on_step=False,
+                 on_epoch=True,batch_size=1)
+
 
         # -- terminal log --
         val_psnr = np.mean(compute_psnrs(deno,clean,div=1.)).item()
@@ -201,7 +208,7 @@ class ColaNetLit(pl.LightningModule):
         gpu_mem.print_peak_gpu_stats(False,"test",reset=True)
         with th.no_grad():
             deno = self.forward(noisy)
-        mem_gb = gpu_mem.print_peak_gpu_stats(False,"test",reset=True)
+        mem_res,mem_alloc = gpu_mem.print_peak_gpu_stats(False,"test",reset=True)
 
         # -- compare --
         loss = th.mean((clean - deno)**2)
@@ -212,7 +219,8 @@ class ColaNetLit(pl.LightningModule):
         self.log("psnr", psnr, on_step=True, on_epoch=False, batch_size=1)
         self.log("ssim", ssim, on_step=True, on_epoch=False, batch_size=1)
         self.log("index",  int(index.item()),on_step=True,on_epoch=False,batch_size=1)
-        self.log("mem_gb",  mem_gb, on_step=True, on_epoch=False, batch_size=1)
+        self.log("mem_res",  mem_res, on_step=True, on_epoch=False, batch_size=1)
+        self.log("mem_alloc",  mem_alloc, on_step=True, on_epoch=False, batch_size=1)
         self.gen_loger.info("te_psnr: %2.2f" % psnr)
 
         # -- log --
@@ -220,7 +228,8 @@ class ColaNetLit(pl.LightningModule):
         results.test_loss = loss.item()
         results.test_psnr = psnr
         results.test_ssim = ssim
-        results.test_gpu_mem = mem_gb
+        results.test_mem_alloc = mem_alloc
+        results.test_mem_res = mem_res
         results.test_index = index.cpu().numpy().item()
         return results
 

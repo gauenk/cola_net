@@ -17,11 +17,13 @@ from easydict import EasyDict as edict
 import data_hub
 
 # -- optical flow --
-# import svnlb
-from colanet import flow
+import svnlb
 
 # -- caching results --
 import cache_io
+
+# -- vision --
+from PIL import Image
 
 # -- network --
 import colanet
@@ -30,8 +32,6 @@ from colanet import lightning
 from colanet.utils.misc import optional,slice_flows
 import colanet.utils.gpu_mem as gpu_mem
 from colanet.utils.misc import rslice,write_pickle,read_pickle
-from colanet.utils.proc_utils import spatial_chop,temporal_chop
-
 
 def run_exp(cfg):
 
@@ -68,9 +68,11 @@ def run_exp(cfg):
     model.model.body[8].sb = cfg.sb
     use_chop = (cfg.ca_fwd == "default") and (cfg.use_chop == "true")
     model.chop = use_chop
+    # print(use_chop)
 
     # -- optional load trained weights --
-    load_trained_state(model,cfg.use_train,cfg.ca_fwd,cfg.sigma,cfg.ws,cfg.wt)
+    load_trained_state(model,cfg.use_train,cfg.train_ver,
+                       cfg.ca_fwd,cfg.sigma,cfg.ws,cfg.wt)
 
     # -- data --
     data,loaders = data_hub.sets.load(cfg)
@@ -81,8 +83,7 @@ def run_exp(cfg):
     frame_start = optional(cfg,"frame_start",0)
     frame_end = optional(cfg,"frame_end",0)
     if frame_start >= 0 and frame_end > 0:
-        def fbnds(fnums,lb,ub):
-            return (lb <= np.min(fnums)) and (ub >= np.max(fnums))
+        def fbnds(fnums,lb,ub): return (lb <= np.min(fnums)) and (ub >= np.max(fnums))
         indices = [i for i in indices if fbnds(data.te.paths['fnums'][groups[i]],
                                                cfg.frame_start,cfg.frame_end)]
     for index in indices:
@@ -96,7 +97,7 @@ def run_exp(cfg):
         region = sample['region']
         noisy,clean = sample['noisy'],sample['clean']
         noisy,clean = noisy.to(cfg.device),clean.to(cfg.device)
-        vid_frames = sample['fnums'].numpy()
+        vid_frames = sample['fnums']
         print("[%d] noisy.shape: " % index,noisy.shape)
         temporal_chop = noisy.shape[0] > 20
         temporal_chop = temporal_chop and not(use_chop)
@@ -117,10 +118,13 @@ def run_exp(cfg):
         # -- optical flow --
         timer.start("flow")
         if cfg.flow == "true":
-            sigma_est = flow.est_sigma(noisy)
-            flows = flow.run_batch(noisy[None,:],sigma_est)
+            noisy_np = noisy.cpu().numpy()
+            if noisy_np.shape[1] == 1:
+                noisy_np = np.repeat(noisy_np,3,axis=1)
+            flows = svnlb.compute_flow(noisy_np,cfg.sigma)
+            flows = edict({k:th.from_numpy(v).to(cfg.device) for k,v in flows.items()})
         else:
-            flows = flow.run_zeros(noisy[None,:])
+            flows = None
         timer.stop("flow")
 
         # -- internal adaptation --
@@ -141,28 +145,25 @@ def run_exp(cfg):
         timer.stop("adapt")
 
         # -- denoise --
-        fwd_fxn = get_fwd_fxn(cfg,model)
         timer.start("deno")
         gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
         with th.no_grad():
-            deno = fwd_fxn(noisy/imax,flows)*imax
-            # fwd_fxn(
-            # if temporal_chop is False:
-            #     deno = model(noisy/imax,flows=flows)*imax
-            # else:
-            #     t = noisy.shape[0]
-            #     tchop = 10
-            #     nchop = (t-1) // tchop + 1
-            #     deno = []
-            #     for ichop in range(nchop):
-            #         t_start = ichop * tchop
-            #         t_end = min((ichop+1) * tchop,t)
-            #         tslice = slice(t_start,t_end)
-            #         flows_t = slice_flows(flows,t_start,t_end)
-            #         noisy_t = noisy[tslice]
-            #         deno_t = model(noisy_t/imax,flows=flows_t)*imax
-            #         deno.append(deno_t)
-            #     deno = th.cat(deno)
+            if temporal_chop is False:
+                deno = model(noisy/imax,ensemble=False,flows=flows)*imax
+            else:
+                t = noisy.shape[0]
+                tchop = 10
+                nchop = (t-1) // tchop + 1
+                deno = []
+                for ichop in range(nchop):
+                    t_start = ichop * tchop
+                    t_end = min((ichop+1) * tchop,t)
+                    tslice = slice(t_start,t_end)
+                    flows_t = slice_flows(flows,t_start,t_end)
+                    noisy_t = noisy[tslice]
+                    deno_t = model(noisy_t/imax,flows=flows_t)*imax
+                    deno.append(deno_t)
+                deno = th.cat(deno)
         timer.stop("deno")
         mem_alloc,mem_res = gpu_mem.print_peak_gpu_stats(True,"val",reset=True)
         deno = deno.clamp(0.,imax)
@@ -194,25 +195,7 @@ def run_exp(cfg):
 
     return results
 
-def get_fwd_fxn(cfg,model):
-    s_verbose = True
-    t_verbose = True
-    s_size = cfg.spatial_crop_size
-    s_overlap = cfg.spatial_crop_overlap
-    t_size = cfg.temporal_crop_size
-    t_overlap = cfg.temporal_crop_overlap
-    model_fwd = lambda vid,flows: model(vid,flows=flows)
-    if not(s_size is None) and not(s_size == "none"):
-        schop_p = lambda vid,flows: spatial_chop(s_size,s_overlap,model_fwd,vid,
-                                                 flows=flows,verbose=s_verbose)
-    else:
-        schop_p = model_fwd
-    tchop_p = lambda vid,flows: temporal_chop(t_size,t_overlap,schop_p,vid,
-                                              flows=flows,verbose=t_verbose)
-    fwd_fxn = tchop_p # rename
-    return fwd_fxn
-
-def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
+def load_trained_state(model,use_train,train_ver,ca_fwd,sigma,ws,wt):
 
     # -- skip if needed --
     if not(use_train == "true"): return
@@ -237,7 +220,10 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
         # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=99.ckpt"
         # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=81-val_loss=1.24e-03.ckpt"
         if np.abs(sigma-50.) < 1e-10:
-            model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=38-val_loss=1.15e-03.ckpt"
+            if train_ver == "v1":
+                model_path = "output/checkpoints/c7e49e53-1300-4561-ba6d-7a6e0bcbbff3-epoch=30.ckpt"
+            else:
+                model_path = "output/checkpoints/50fb2f07-1ac0-48ae-88d1-8e5504621969-epoch=30.ckpt"
         elif np.abs(sigma-30.) < 1e-10:
             model_path = "output/checkpoints/aa543914-3948-426b-b744-8403d46878cd-epoch=30.ckpt"
         elif np.abs(sigma-10.) < 1e-10:
@@ -255,6 +241,71 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
     model.model.load_state_dict(state)
     return model
 
+def get_sample_vid(cfg):
+    # -- data --
+    data,loaders = data_hub.sets.load(cfg)
+    groups = data.te.groups
+    indices = [i for i,g in enumerate(groups) if cfg.vid_name in g]
+
+    # -- optional filter --
+    frame_start = optional(cfg,"frame_start",0)
+    frame_end = optional(cfg,"frame_end",0)
+    if frame_start >= 0 and frame_end > 0:
+        def fbnds(fnums,lb,ub): return (lb <= np.min(fnums)) and (ub >= np.max(fnums))
+        indices = [i for i in indices if fbnds(data.te.paths['fnums'][groups[i]],
+                                               cfg.frame_start,cfg.frame_end)]
+    return data.te,indices
+
+def show_edge_effect(records,exps):
+
+    # -- compare denos --
+    def get_name(ca_group,use_chop):
+        if ca_group == "dnls_k": return "Ours"
+        if use_chop == "true": return "Chop"
+        else: return "Full"
+    def read_vid(deno_fns):
+        denos = []
+        for deno_fn in deno_fns:
+            vid_t = Image.open(deno_fn).convert("L")
+            vid_t = np.array(vid_t)/255.
+            vid_t = rearrange(vid_t,'h w -> 1 h w')
+            denos.append(vid_t)
+        denos = np.stack(denos)
+        return denos
+
+    # -- get deno vids --
+    denos = {}
+    for ca_group,gdf in records.groupby("ca_fwd"):
+        for use_chop,cdf in gdf.groupby("use_chop"):
+            name = get_name(ca_group,use_chop)
+            deno_fns = cdf['deno_fns'].iloc[0].ravel()
+            denos_i = read_vid(deno_fns)
+            print(name,denos_i.shape)
+            denos[name] = denos_i
+
+    # -- unpack clean ref --
+    data_tr,data_inds = get_sample_vid(exps[0])
+    region = data_tr[data_inds[0]]['region']
+    clean = data_tr[data_inds[0]]['clean'].numpy()
+    clean = rslice(clean,region)/255.
+    # print(clean.shape)
+    # clean = denos['Full']
+
+    # -- save residual maps --
+    save_root = Path("./output/show_edge_effect/")
+    if not save_root.exists():
+        save_root.mkdir(parents=True)
+    for name,vid in denos.items():
+        res = (clean - vid)**2
+        args = np.where(res > .001)
+        print(res.shape)
+        # res[:,:,64:,:] = 0.
+        res[args] = 0.
+        # res = np.abs(clean - vid)/(np.abs(clean)+1e-10)
+        print(res.max())
+        res /= res.max().item()
+        colanet.utils.io.save_burst(res,save_root,name)
+
 def save_path_from_cfg(cfg):
     path = Path(cfg.dname) / cfg.vid_name
     train_str = "train" if  cfg.train == "true" else "notrain"
@@ -269,8 +320,7 @@ def main():
 
     # -- get cache --
     cache_dir = ".cache_io"
-    # cache_name = "test_rgb_net" # best results
-    cache_name = "testing" # best results
+    cache_name = "show_finetune"
     cache = cache_io.ExpCache(cache_dir,cache_name)
     # cache.clear()
 
@@ -279,50 +329,58 @@ def main():
     # cfg.isize = "256_256"
     # cfg.isize = "none"#"128_128"
     cfg.bw = True
-    cfg.nframes = 10
-    cfg.frame_start = 0
+    cfg.nframes = 3
+    cfg.frame_start = 10
     cfg.frame_end = cfg.frame_start+cfg.nframes-1
 
-    # -- processing --
-    cfg.spatial_crop_size = "none"
-    cfg.spatial_crop_overlap = 0.#0.1
-    cfg.temporal_crop_size = 3#cfg.nframes
-    cfg.temporal_crop_overlap = 0/5.#4/5. # 3 of 5 frames
-
-
     # -- get mesh --
-    dnames,sigmas = ["set8"],[50]#,30.]
+    dnames,sigmas = ["set8"],[30]#,30.]
     # vid_names = ["tractor"]
-    # vid_names = ["sunflower"]
+    # vid_names = ["hypersmooth"]
+    # vid_names = ["park_joy"]
+    # vid_names = ["snowboard"]
+    vid_names = ["sunflower"]
     # vid_names = ["sunflower","hypersmooth","tractor"]
-    vid_names = ["snowboard","sunflower","tractor","motorbike",
-                 "hypersmooth","park_joy","rafting","touchdown"]
+    # vid_names = ["snowboard","sunflower","tractor","motorbike",
+    #              "hypersmooth","park_joy","rafting","touchdown"]
     internal_adapt_nsteps = [300]
     internal_adapt_nepochs = [0]
-    ws,wt,k,sb = [20],[3],[100],[48*1024]#1024*1]
-    flow,isizes,adapt_mtypes = ["true"],["none"],["rand"]
+    ws,wt,k,sb = [20],[3],[100],[50*1024]#1024*1]
+    flow,isizes,adapt_mtypes = ["true"],["256_256"],["rand"]
     ca_fwd_list,use_train = ["dnls_k"],["true"]
+    train_ver = ["v1","v2"]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "internal_adapt_nsteps":internal_adapt_nsteps,
                  "internal_adapt_nepochs":internal_adapt_nepochs,
                  "flow":flow,"ws":ws,"wt":wt,"adapt_mtype":adapt_mtypes,
                  "isize":isizes,"use_train":use_train,"ca_fwd":ca_fwd_list,
-                 "ws":ws,"wt":wt,"k":k, "sb":sb, "use_chop":["false"]}
+                 "ws":ws,"wt":wt,"k":k, "sb":sb, "use_chop":["false"],
+                 "train_ver":train_ver}
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
     cache_io.append_configs(exps_a,cfg) # merge the two
+
+    # -- ours w/out training --
+    exp_lists['use_train'] = ["false"]
+    exp_lists['train_ver'] = ["-1"]
+    exps_b = cache_io.mesh_pydicts(exp_lists) # create mesh
+    cfg.bw = True
+    cache_io.append_configs(exps_b,cfg) # merge the two
 
     # -- original w/out training --
     exp_lists['flow'] = ["false"]
     exp_lists['use_train'] = ["false"]#,"true"]
     exp_lists['ca_fwd'] = ["default"]
     exp_lists['use_chop'] = ["true"]
+    exp_lists['train_ver'] = ["-1"]
     exp_lists['sb'] = [1]
-    exps_b = cache_io.mesh_pydicts(exp_lists) # create mesh
+    exp_lists['ws'] = [-1]
+    exp_lists['wt'] = [-1]
+    exps_c = cache_io.mesh_pydicts(exp_lists) # create mesh
     cfg.bw = True
-    cache_io.append_configs(exps_b,cfg) # merge the two
+    cache_io.append_configs(exps_c,cfg) # merge the two
 
     # -- cat exps --
-    exps = exps_a + exps_b
+    exps = exps_b + exps_a + exps_c
 
     # -- run exps --
     nexps = len(exps)
@@ -337,7 +395,8 @@ def main():
 
         # -- logic --
         uuid = cache.get_uuid(exp) # assing ID to each Dict in Meshgrid
-        # if exp.use_chop == "false" and exp.ca_fwd != "dnls_k":
+        # cache.clear_exp(uuid)
+        # if exp.use_chop == "true":
         #     cache.clear_exp(uuid)
         # if exp.ca_fwd != "dnls_k" and exp.sigma == 30.:
         #     cache.clear_exp(uuid)
@@ -357,43 +416,45 @@ def main():
 
     # -- viz report --
     for use_train,tdf in records.groupby("use_train"):
-        for ca_group,gdf in tdf.groupby("ca_fwd"):
-            for use_chop,cdf in gdf.groupby("use_chop"):
-                for sigma,sdf in cdf.groupby("sigma"):
-                    print("--- %d ---" % sigma)
-                    for use_flow,fdf in sdf.groupby("flow"):
-                        agg_psnrs,agg_ssims,agg_dtime = [],[],[]
-                        agg_mem_res,agg_mem_alloc = [],[]
-                        print("--- %s (%s,%s,%s) ---" %
-                              (ca_group,use_train,use_flow,use_chop))
-                        for vname,vdf in fdf.groupby("vid_name"):
-                            psnrs = np.stack(vdf['psnrs'])
-                            dtime = np.stack(vdf['timer_deno'])
-                            mem_alloc = np.stack(vdf['mem_alloc'])
-                            mem_res = np.stack(vdf['mem_res'])
-                            ssims = np.stack(vdf['ssims'])
-                            psnr_mean = psnrs.mean().item()
-                            ssim_mean = ssims.mean().item()
-                            uuid = vdf['uuid'].iloc[0]
-                            # print(dtime,mem_gb)
-                            # print(vname,psnr_mean,ssim_mean,uuid)
-                            args = (vname,psnr_mean,ssim_mean,uuid)
-                            print("%13s: %2.3f %1.3f %s" % args)
-                            agg_psnrs.append(psnr_mean)
-                            agg_ssims.append(ssim_mean)
-                            agg_mem_res.append(mem_res.mean().item())
-                            agg_mem_alloc.append(mem_alloc.mean().item())
-                            agg_dtime.append(dtime.mean().item())
-                        psnr_mean = np.mean(agg_psnrs)
-                        ssim_mean = np.mean(agg_ssims)
-                        dtime_mean = np.mean(agg_dtime)
-                        mem_res_mean = np.mean(agg_mem_res)
-                        mem_alloc_mean = np.mean(agg_mem_alloc)
-                        uuid = gdf['uuid']
-                        params = ("Ave",psnr_mean,ssim_mean,dtime_mean,
-                                  mem_res_mean,mem_alloc_mean)
-                        print("%13s: %2.3f %1.3f %2.3f %2.3f %2.3f" % params)
+        for train_ver,vdf in tdf.groupby("train_ver"):
+            for ca_group,gdf in vdf.groupby("ca_fwd"):
+                for use_chop,cdf in gdf.groupby("use_chop"):
+                    for sigma,sdf in cdf.groupby("sigma"):
+                        print("--- %d ---" % sigma)
+                        for use_flow,fdf in sdf.groupby("flow"):
+                            agg_psnrs,agg_ssims,agg_dtime = [],[],[]
+                            agg_mem_res,agg_mem_alloc = [],[]
+                            print("--- %s (%s,%s,%s,%s) ---" %
+                                  (ca_group,train_ver,use_train,use_flow,use_chop))
+                            for vname,vdf in fdf.groupby("vid_name"):
+                                psnrs = np.stack(vdf['psnrs'])
+                                dtime = np.stack(vdf['timer_deno'])
+                                mem_alloc = np.stack(vdf['mem_alloc'])
+                                mem_res = np.stack(vdf['mem_res'])
+                                ssims = np.stack(vdf['ssims'])
+                                psnr_mean = psnrs.mean().item()
+                                ssim_mean = ssims.mean().item()
+                                uuid = vdf['uuid'].iloc[0]
+                                # print(dtime,mem_gb)
+                                # print(vname,psnr_mean,ssim_mean,uuid)
+                                args = (vname,psnr_mean,ssim_mean,uuid)
+                                print("%13s: %2.3f %1.3f %s" % args)
+                                agg_psnrs.append(psnr_mean)
+                                agg_ssims.append(ssim_mean)
+                                agg_mem_res.append(mem_res.mean().item())
+                                agg_mem_alloc.append(mem_alloc.mean().item())
+                                agg_dtime.append(dtime.mean().item())
+                            psnr_mean = np.mean(agg_psnrs)
+                            ssim_mean = np.mean(agg_ssims)
+                            dtime_mean = np.mean(agg_dtime)
+                            mem_res_mean = np.mean(agg_mem_res)
+                            mem_alloc_mean = np.mean(agg_mem_alloc)
+                            uuid = gdf['uuid']
+                            params = ("Ave",psnr_mean,ssim_mean,dtime_mean,
+                                      mem_res_mean,mem_alloc_mean)
+                            print("%13s: %2.3f %1.3f %2.3f %2.3f %2.3f" % params)
 
+    show_edge_effect(records,exps)
 
 if __name__ == "__main__":
     main()
