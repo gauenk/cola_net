@@ -8,9 +8,10 @@ from easydict import EasyDict as edict
 from .model import Model
 from .misc import select_sigma,default_options
 
-def load_model(data_sigma,version=1,chnls=1):
+def load_model(cfg,version=1,chnls=1):
 
     # -- params --
+    data_sigma = cfg.sigma
     model_sigma = select_sigma(data_sigma)
     args = default_options()
     args.ensemble = False
@@ -30,6 +31,19 @@ def load_model(data_sigma,version=1,chnls=1):
     # modded_dict(model_state)
     model.model.load_state_dict(model_state)
     model.eval()
+
+    # -- to device --
+    model = model.to(cfg.device)
+
+    # -- append cfg --
+    if not(cfg is None):
+        print(cfg.ws,cfg.wt,cfg.k)
+        model.model.body[8].ca_forward_type = cfg.ca_fwd
+        model.model.body[8].ws = cfg.ws
+        model.model.body[8].wt = cfg.wt
+        model.model.body[8].k = cfg.k
+        model.model.body[8].sb = cfg.sb
+
     return model
 
 def modded_dict(mdict):

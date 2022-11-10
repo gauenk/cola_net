@@ -30,7 +30,7 @@ from colanet import lightning
 from colanet.utils.misc import optional,slice_flows
 import colanet.utils.gpu_mem as gpu_mem
 from colanet.utils.misc import rslice,write_pickle,read_pickle
-from colanet.utils.proc_utils import spatial_chop,temporal_chop
+from colanet.utils.proc_utils import get_fwd_fxn#spatial_chop,temporal_chop
 
 
 def run_exp(cfg):
@@ -58,15 +58,11 @@ def run_exp(cfg):
 
     # -- network --
     nchnls = 1 if cfg.bw else 3
-    model = colanet.refactored.load_model(cfg.mtype,cfg.sigma,2,nchnls).to(cfg.device)
+    model = colanet.load_model(cfg)
     model.eval()
     imax = 255.
-    model.model.body[8].ca_forward_type = cfg.ca_fwd
-    model.model.body[8].ws = cfg.ws
-    model.model.body[8].wt = cfg.wt
-    model.model.body[8].k = cfg.k
-    model.model.body[8].sb = cfg.sb
     use_chop = (cfg.ca_fwd == "default") and (cfg.use_chop == "true")
+    print("use_chop: ",use_chop)
     model.chop = use_chop
 
     # -- optional load trained weights --
@@ -75,16 +71,9 @@ def run_exp(cfg):
     # -- data --
     data,loaders = data_hub.sets.load(cfg)
     groups = data.te.groups
-    indices = [i for i,g in enumerate(groups) if cfg.vid_name in g]
+    # indices = [i for i,g in enumerate(groups) if cfg.vid_name in g]
+    indices = data_hub.filter_subseq(data.te,cfg.vid_name,cfg.frame_start,cfg.frame_end)
 
-    # -- optional filter --
-    frame_start = optional(cfg,"frame_start",0)
-    frame_end = optional(cfg,"frame_end",0)
-    if frame_start >= 0 and frame_end > 0:
-        def fbnds(fnums,lb,ub):
-            return (lb <= np.min(fnums)) and (ub >= np.max(fnums))
-        indices = [i for i in indices if fbnds(data.te.paths['fnums'][groups[i]],
-                                               cfg.frame_start,cfg.frame_end)]
     for index in indices:
 
         # -- clean memory --
@@ -121,7 +110,7 @@ def run_exp(cfg):
             flows = flow.run_batch(noisy[None,:],sigma_est)
         else:
             flows = flow.run_zeros(noisy[None,:])
-        timer.stop("flow")
+        timer.sync_stop("flow")
 
         # -- internal adaptation --
         timer.start("adapt")
@@ -138,34 +127,19 @@ def run_exp(cfg):
                 clean_gt = clean,
                 region_gt = [2,4,128,256,256,384]
             )
-        timer.stop("adapt")
+        timer.sync_stop("adapt")
 
         # -- denoise --
         fwd_fxn = get_fwd_fxn(cfg,model)
-        timer.start("deno")
-        gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
         with th.no_grad():
-            deno = fwd_fxn(noisy/imax,flows)*imax
-            # fwd_fxn(
-            # if temporal_chop is False:
-            #     deno = model(noisy/imax,flows=flows)*imax
-            # else:
-            #     t = noisy.shape[0]
-            #     tchop = 10
-            #     nchop = (t-1) // tchop + 1
-            #     deno = []
-            #     for ichop in range(nchop):
-            #         t_start = ichop * tchop
-            #         t_end = min((ichop+1) * tchop,t)
-            #         tslice = slice(t_start,t_end)
-            #         flows_t = slice_flows(flows,t_start,t_end)
-            #         noisy_t = noisy[tslice]
-            #         deno_t = model(noisy_t/imax,flows=flows_t)*imax
-            #         deno.append(deno_t)
-            #     deno = th.cat(deno)
-        timer.stop("deno")
+            deno = fwd_fxn(noisy/imax,flows)
+        gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
+        timer.sync_start("deno")
+        with th.no_grad():
+            deno = fwd_fxn(noisy/imax,flows)
+        deno = deno.clamp(0.,1.)*imax
+        timer.sync_stop("deno")
         mem_alloc,mem_res = gpu_mem.print_peak_gpu_stats(True,"val",reset=True)
-        deno = deno.clamp(0.,imax)
 
         # -- save example --
         out_dir = Path(cfg.saved_dir) / str(cfg.uuid)
@@ -191,26 +165,9 @@ def run_exp(cfg):
         results.mem_alloc.append([mem_alloc])
         for name,time in timer.items():
             results[name].append(time)
+        print(timer)
 
     return results
-
-def get_fwd_fxn(cfg,model):
-    s_verbose = True
-    t_verbose = True
-    s_size = cfg.spatial_crop_size
-    s_overlap = cfg.spatial_crop_overlap
-    t_size = cfg.temporal_crop_size
-    t_overlap = cfg.temporal_crop_overlap
-    model_fwd = lambda vid,flows: model(vid,flows=flows)
-    if not(s_size is None) and not(s_size == "none"):
-        schop_p = lambda vid,flows: spatial_chop(s_size,s_overlap,model_fwd,vid,
-                                                 flows=flows,verbose=s_verbose)
-    else:
-        schop_p = model_fwd
-    tchop_p = lambda vid,flows: temporal_chop(t_size,t_overlap,schop_p,vid,
-                                              flows=flows,verbose=t_verbose)
-    fwd_fxn = tchop_p # rename
-    return fwd_fxn
 
 def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
 
@@ -252,7 +209,10 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
     # -- load model state --
     state = th.load(model_path)['state_dict']
     lightning.remove_lightning_load_state(state)
-    model.model.load_state_dict(state)
+    if hasattr(model,"model"):
+        model.model.load_state_dict(state)
+    else:
+        model.load_state_dict(state)
     return model
 
 def save_path_from_cfg(cfg):
@@ -269,19 +229,21 @@ def main():
 
     # -- get cache --
     cache_dir = ".cache_io"
-    # cache_name = "test_rgb_net" # best results
-    cache_name = "testing" # best results
+    # cache_name = "test_rgb_net" # best results (aaai23)
+    cache_name = "test_rgb_net_cvpr23" # best results
     cache = cache_io.ExpCache(cache_dir,cache_name)
     # cache.clear()
 
     # -- get defaults --
     cfg = configs.default_test_vid_cfg()
     # cfg.isize = "256_256"
+    cfg.isize = "128_128"
     # cfg.isize = "none"#"128_128"
     cfg.bw = True
-    cfg.nframes = 10
+    cfg.nframes = 3
     cfg.frame_start = 0
     cfg.frame_end = cfg.frame_start+cfg.nframes-1
+    cfg.attn_mode = "dnls_k"
 
     # -- processing --
     cfg.spatial_crop_size = "none"
@@ -291,7 +253,7 @@ def main():
 
 
     # -- get mesh --
-    dnames,sigmas = ["set8"],[50]#,30.]
+    dnames,sigmas = ["set8"],[30]#,30.]
     # vid_names = ["tractor"]
     # vid_names = ["sunflower"]
     # vid_names = ["sunflower","hypersmooth","tractor"]
@@ -299,30 +261,74 @@ def main():
                  "hypersmooth","park_joy","rafting","touchdown"]
     internal_adapt_nsteps = [300]
     internal_adapt_nepochs = [0]
-    ws,wt,k,sb = [20],[3],[100],[48*1024]#1024*1]
+
+    # -- standard --
+    # ws,wt = [27],[3]
+    # cfg.k_s = 100
+    # cfg.k_a = 100
+    # cfg.refine_inds = "f-f-f"
+
+    # -- prop0 --
+    ws,wt = ['27-3-3'],['3-0-0']
+    cfg.k_s = 100
+    cfg.k_a = 100
+    cfg.ws = 27
+    cfg.wt = 3
+    cfg.ws_r = 1
+    # cfg.k_a = 50
+    # cfg.refine_inds = "f-f-f"
+
+    # -- prop1 --
+    # ws,wt = ['27-27-3'],['3-3-0']
+    # cfg.k_s = '100-500-100'
+    # cfg.k_a = '100-100-100'
+    # cfg.k_a = 50
+    # cfg.refine_inds = "f-f-t"
+
+    # -- prop2 --
+    # ws,wt = ['27-27-27'],['3-3-3']
+    # cfg.k_s = '100-100-100'
+    # cfg.k_a = '100-100-100'
+    # cfg.refine_inds = "f-f-f"
+
+    k,sb = [100],[48*1024]#1024*1]
     flow,isizes,adapt_mtypes = ["true"],["none"],["rand"]
     ca_fwd_list,use_train = ["dnls_k"],["true"]
+    refine_inds = ["f-f-f","f-f-t","f-t-f","f-t-t"]
+    model_type = ['augmented']
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "internal_adapt_nsteps":internal_adapt_nsteps,
                  "internal_adapt_nepochs":internal_adapt_nepochs,
                  "flow":flow,"ws":ws,"wt":wt,"adapt_mtype":adapt_mtypes,
                  "isize":isizes,"use_train":use_train,"ca_fwd":ca_fwd_list,
-                 "ws":ws,"wt":wt,"k":k, "sb":sb, "use_chop":["false"]}
+                 "ws":ws,"wt":wt,"k":k, "sb":sb, "use_chop":["false"],
+                 "model_type":model_type,"refine_inds":refine_inds}
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
     cache_io.append_configs(exps_a,cfg) # merge the two
 
+    # cfg.attn_mode = "dnls_k"
+    # cfg.ws = "27-5-5"
+    # cfg.wt = "3-0-0"
+    # cfg.k_s = '500-500-100'
+    # cfg.k_a = 100
+    # cfg.refine_inds = "f-t-t"
+    # exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
+    # cache_io.append_configs(exps_a,cfg) # merge the two
+
     # -- original w/out training --
+    cfg.ws = 27
+    exp_lists['model_type'] = ['refactored']
     exp_lists['flow'] = ["false"]
     exp_lists['use_train'] = ["false"]#,"true"]
     exp_lists['ca_fwd'] = ["default"]
-    exp_lists['use_chop'] = ["true"]
+    exp_lists['use_chop'] = ["false"]
     exp_lists['sb'] = [1]
     exps_b = cache_io.mesh_pydicts(exp_lists) # create mesh
     cfg.bw = True
     cache_io.append_configs(exps_b,cfg) # merge the two
 
     # -- cat exps --
-    exps = exps_a + exps_b
+    exps = exps_a# + exps_b
 
     # -- run exps --
     nexps = len(exps)
@@ -337,6 +343,12 @@ def main():
 
         # -- logic --
         uuid = cache.get_uuid(exp) # assing ID to each Dict in Meshgrid
+
+        clear_exp = exp.attn_mode == "dnls_k" and exp.model_type == "refactored"
+        clear_exp = clear_exp and (exp.ws != 27)
+        clear_exp = clear_exp or ('t' in exp.refine_inds)
+        # if clear_exp:
+        #     cache.clear_exp(uuid)
         # if exp.use_chop == "false" and exp.ca_fwd != "dnls_k":
         #     cache.clear_exp(uuid)
         # if exp.ca_fwd != "dnls_k" and exp.sigma == 30.:
@@ -357,7 +369,7 @@ def main():
 
     # -- viz report --
     for use_train,tdf in records.groupby("use_train"):
-        for ca_group,gdf in tdf.groupby("ca_fwd"):
+        for ca_group,gdf in tdf.groupby("refine_inds"):
             for use_chop,cdf in gdf.groupby("use_chop"):
                 for sigma,sdf in cdf.groupby("sigma"):
                     print("--- %d ---" % sigma)

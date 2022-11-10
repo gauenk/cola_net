@@ -173,6 +173,7 @@ class ContextualAttention_Enhance(nn.Module):
         search_abs = ws == -1
         region = [0,0,h,w] if region is None else region
         device = b.device
+        print("ws,wt: ",ws,wt)
 
         # -- global region --
         # use_k = not(ws==-1)
@@ -224,21 +225,12 @@ class ContextualAttention_Enhance(nn.Module):
         bflow = optional(flows,'bflow',None)#[None,:]
 
         # print(ws,wt,k)
-        if inds_prev is None:
-            xsearch = dnls.search.init("prod_with_index", fflow, bflow,
-                                       k, ps, pt, ws, wt,
-                                       oh0, ow0, oh1, ow1, chnls=-1,
-                                       dilation=dil, stride0=stride0,stride1=stride1,
-                                       reflect_bounds=False, use_k=use_k,use_adj=True,
-                                       search_abs=search_abs,rbwd=rand_bwd,exact=exact)
-        else:
-            xsearch = dnls.search.init("prod_refine", inds_prev,
-                                       k, ps, pt, ws_r,
-                                       oh0, ow0, oh1, ow1, chnls=-1,
-                                       dilation=dil, stride0=stride0,stride1=stride1,
-                                       reflect_bounds=False, use_k=use_k,use_adj=True,
-                                       search_abs=search_abs,rbwd=rand_bwd,exact=exact)
-
+        xsearch = dnls.search.init("prod_with_index", fflow, bflow,
+                                   k, ps, pt, ws, wt,
+                                   oh0, ow0, oh1, ow1, chnls=-1,
+                                   dilation=dil, stride0=stride0,stride1=stride1,
+                                   reflect_bounds=False, use_k=use_k,use_adj=True,
+                                   search_abs=search_abs,rbwd=rand_bwd,exact=exact)
         wpsum = dnls.reducers.WeightedPatchSum(ps, pt, h_off=0, w_off=0,
                                                dilation=dil,
                                                reflect_bounds=reflect_bounds,
@@ -670,6 +662,7 @@ class ContextualAttention_Enhance(nn.Module):
         b2 = self.theta(b)
         b3 = self.phi(b)
 
+        # print("hi.shape: ",hi.shape)
         raw_int_bs = list(b1.size())  # b*c*h*w
         region = region
 
