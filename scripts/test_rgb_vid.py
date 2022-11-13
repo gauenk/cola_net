@@ -41,6 +41,10 @@ def run_exp(_cfg):
     cfg = copy.deepcopy(_cfg)
     cache_io.exp_strings2bools(cfg)
 
+    # -- clear --
+    th.cuda.empty_cache()
+    th.cuda.synchronize()
+
     # -- set device --
     th.cuda.set_device(int(cfg.device.split(":")[1]))
 
@@ -125,7 +129,7 @@ def run_exp(_cfg):
         # -- run once for setup gpu --
         if cfg.burn_in:
             with th.no_grad():
-                deno = fwd_fxn(noisy[[0],...,:128,:128]/imax,None)
+                fwd_fxn(noisy[[0],...,:128,:128]/imax,None)
             model.reset_times()
 
         # -- benchmark it! --
@@ -167,6 +171,10 @@ def run_exp(_cfg):
                 results[name] = []
             results[name].append(time)
 
+    # -- clear --
+    th.cuda.empty_cache()
+    th.cuda.synchronize()
+
     return results
 
 def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
@@ -207,6 +215,7 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
         raise ValueError(f"Uknown ca_fwd [{ca_fwd}]")
 
     # -- load model state --
+    print("Loading trained network: ",model_path)
     state = th.load(model_path)['state_dict']
     lightning.remove_lightning_load_state(state)
     if hasattr(model,"model"):
@@ -241,7 +250,7 @@ def main():
     cfg.isize = "512_512"
     # cfg.isize = "none"#"128_128"
     cfg.bw = True
-    cfg.nframes = 7
+    cfg.nframes = 5
     cfg.frame_start = 0
     cfg.frame_end = cfg.frame_start+cfg.nframes-1
     cfg.attn_mode = "dnls_k"
@@ -253,14 +262,14 @@ def main():
     # -- processing --
     cfg.spatial_crop_size = "none"
     cfg.spatial_crop_overlap = 0.#0.1
-    cfg.temporal_crop_size = 7#cfg.nframes
+    cfg.temporal_crop_size = 5#cfg.nframes
     cfg.temporal_crop_overlap = 0/5.#4/5. # 3 of 5 frames
 
 
     # -- get mesh --
-    dnames,sigmas = ["set8"],[30]#,30.]
+    dnames,sigmas = ["set8"],[30,50]
     # vid_names = ["tractor"]
-    vid_names = ["sunflower","tractor"]
+    vid_names = ["sunflower","tractor","park_joy"]
     # vid_names = ["sunflower"]
     # vid_names = ["sunflower","hypersmooth","tractor"]
     # vid_names = ["snowboard","sunflower","tractor","motorbike",
@@ -299,7 +308,7 @@ def main():
     ca_fwd_list,use_train = ["dnls_k"],["true"]
     # refine_inds = ["f-f-f","f-f-t","f-t-f","f-t-t"]
     # aug_test = ["false"]
-    refine_inds = ["t-t-t","f-f-f"]
+    refine_inds = ["f-f-f","t-t-t","f-f-t"]
     aug_test = ["false","true"]
     aug_refine_inds = ["true"]
     # aug_test = ["false","true"]
