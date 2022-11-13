@@ -23,6 +23,13 @@ class merge_block(nn.Module):
         self.att_SK = nn.Linear(in_features=vector_length,out_features=out_channels)
         self.softmax = nn.Softmax(dim=1)
 
+    @property
+    def times(self):
+        return self.CAUnit.times
+
+    def reset_times(self):
+        self.CAUnit._reset_times()
+
     def forward(self, x, flows, inds_prev=None):
         out1 = self.SKUnit(x)[:,None]
         out2,inds_pred = self.CAUnit(x,flows,inds_prev)

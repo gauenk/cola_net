@@ -25,6 +25,7 @@ def load_model(cfg):
     arch_cfg = extract_arch_config(cfg,optional)
     search_cfg = extract_search_config(cfg,optional)
     io_cfg = extract_io_config(cfg,optional)
+    if init: return
 
     # -- init model --
     model = ColaNet(arch_cfg,search_cfg)
@@ -85,7 +86,7 @@ def extract_arch_config(_cfg,optional):
              "n_resblock":16,"n_feats":64,"n_colors":1,
              "res_scale":1,"rgb_range":1.,"stages":6,
              "blocks":3,"act":"relu","sigma":0.,
-             "return_inds":False}
+             "arch_return_inds":False}
     return extract_pairs(pairs,_cfg,optional)
 
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -104,6 +105,6 @@ def extract_model_config(cfg):
     return model_cfg
 
 # -- run to populate "_fields" --
-load_model(edict({__init=True}))
+load_model(edict({"__init":True}))
 
 

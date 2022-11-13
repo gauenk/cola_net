@@ -173,7 +173,7 @@ class ContextualAttention_Enhance(nn.Module):
         search_abs = ws == -1
         region = [0,0,h,w] if region is None else region
         device = b.device
-        print("ws,wt: ",ws,wt)
+        # print("ws,wt: ",ws,wt)
 
         # -- global region --
         # use_k = not(ws==-1)
@@ -666,9 +666,11 @@ class ContextualAttention_Enhance(nn.Module):
         raw_int_bs = list(b1.size())  # b*c*h*w
         region = region
 
-        patch_28, paddings_28 = extract_image_patches_og(b1, ksizes=[self.ksize, self.ksize],
-                                                      strides=[self.stride_1, self.stride_1],
-                                                      rates=[1, 1],padding='same')
+        patch_28, paddings_28 = extract_image_patches_og(b1,
+                                                ksizes=[self.ksize, self.ksize],
+                                                strides=[self.stride_1, self.stride_1],
+                                                rates=[1, 1],padding='same')
+
         # print("patch_28.shape: ",patch_28.shape)
         patch_28 = patch_28.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_28 = patch_28.permute(0, 4, 1, 2, 3)

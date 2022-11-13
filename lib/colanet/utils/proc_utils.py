@@ -21,7 +21,7 @@ def get_fwd_fxn(cfg,model):
     t_size = cfg.temporal_crop_size
     t_overlap = cfg.temporal_crop_overlap
     model_fwd = lambda vid,flows: model(vid,flows=flows)
-    if not(s_size is None) and not(s_size == "none"):
+    if not(s_size is None) and not(s_size == "none") and not(s_size <= 0):
         schop_p = lambda vid,flows: spatial_chop(s_size,s_overlap,model_fwd,vid,
                                                  flows=flows,verbose=s_verbose)
     else:
@@ -84,8 +84,8 @@ def fill_spatial_chunk(vid,ivid,h_chunk,w_chunk,size):
 
 def get_spatial_chunk_flow(flows,h_chunk,w_chunk,ssize):
     out_flows = edict()
-    out_flows.fflow = flows.fflow[...,h_chunk:h_chunk+size,w_chunk:w_chunk+size]
-    out_flows.bflow = flows.bflow[...,h_chunk:h_chunk+size,w_chunk:w_chunk+size]
+    out_flows.fflow = flows.fflow[...,h_chunk:h_chunk+ssize,w_chunk:w_chunk+ssize]
+    out_flows.bflow = flows.bflow[...,h_chunk:h_chunk+ssize,w_chunk:w_chunk+ssize]
     return out_flows
 
 def get_temporal_chunk_flow(flows,t_slice):

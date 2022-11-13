@@ -1,8 +1,10 @@
 
 # -- misc --
 import os,math,tqdm
-import pprint,random
+import pprint,random,copy
 pp = pprint.PrettyPrinter(indent=4)
+from functools import partial
+
 
 # -- linalg --
 import numpy as np
@@ -31,9 +33,13 @@ from colanet.utils.misc import optional,slice_flows
 import colanet.utils.gpu_mem as gpu_mem
 from colanet.utils.misc import rslice,write_pickle,read_pickle
 from colanet.utils.proc_utils import get_fwd_fxn#spatial_chop,temporal_chop
+from colanet.utils.aug_test import test_x8
 
+def run_exp(_cfg):
 
-def run_exp(cfg):
+    # -- init --
+    cfg = copy.deepcopy(_cfg)
+    cache_io.exp_strings2bools(cfg)
 
     # -- set device --
     th.cuda.set_device(int(cfg.device.split(":")[1]))
@@ -46,12 +52,10 @@ def run_exp(cfg):
     results.psnrs = []
     results.ssims = []
     results.noisy_psnrs = []
-    results.adapt_psnrs = []
     results.deno_fns = []
     results.vid_frames = []
     results.vid_name = []
     results.timer_flow = []
-    results.timer_adapt = []
     results.timer_deno = []
     results.mem_res = []
     results.mem_alloc = []
@@ -105,34 +109,26 @@ def run_exp(cfg):
 
         # -- optical flow --
         timer.start("flow")
-        if cfg.flow == "true":
+        if cfg.flow == True:
             sigma_est = flow.est_sigma(noisy)
             flows = flow.run_batch(noisy[None,:],sigma_est)
         else:
             flows = flow.run_zeros(noisy[None,:])
         timer.sync_stop("flow")
 
-        # -- internal adaptation --
-        timer.start("adapt")
-        run_internal_adapt = cfg.internal_adapt_nsteps > 0
-        run_internal_adapt = run_internal_adapt and (cfg.internal_adapt_nepochs > 0)
-        adapt_psnrs = [0.]
-        if run_internal_adapt:
-            adapt_psnrs = model.run_internal_adapt(
-                noisy,cfg.sigma,flows=flows,
-                ws=cfg.ws,wt=cfg.wt,batch_size=batch_size,
-                nsteps=cfg.internal_adapt_nsteps,
-                nepochs=cfg.internal_adapt_nepochs,
-                sample_mtype=cfg.adapt_mtype,
-                clean_gt = clean,
-                region_gt = [2,4,128,256,256,384]
-            )
-        timer.sync_stop("adapt")
-
         # -- denoise --
-        fwd_fxn = get_fwd_fxn(cfg,model)
-        with th.no_grad():
-            deno = fwd_fxn(noisy/imax,flows)
+        if cfg.aug_test:
+            aug_fxn = partial(test_x8,model,use_refine=cfg.aug_refine_inds)
+        else: aug_fxn = model
+        fwd_fxn = get_fwd_fxn(cfg,aug_fxn)
+
+        # -- run once for setup gpu --
+        if cfg.burn_in:
+            with th.no_grad():
+                deno = fwd_fxn(noisy/imax,flows)
+            model.reset_times()
+
+        # -- benchmark it! --
         gpu_mem.print_peak_gpu_stats(False,"val",reset=True)
         timer.sync_start("deno")
         with th.no_grad():
@@ -140,6 +136,7 @@ def run_exp(cfg):
         deno = deno.clamp(0.,1.)*imax
         timer.sync_stop("deno")
         mem_alloc,mem_res = gpu_mem.print_peak_gpu_stats(True,"val",reset=True)
+        print("model.times: ",model.times)
 
         # -- save example --
         out_dir = Path(cfg.saved_dir) / str(cfg.uuid)
@@ -157,7 +154,6 @@ def run_exp(cfg):
         results.psnrs.append(psnrs)
         results.ssims.append(ssims)
         results.noisy_psnrs.append(noisy_psnrs)
-        results.adapt_psnrs.append(adapt_psnrs)
         results.deno_fns.append(deno_fns)
         results.vid_frames.append(vid_frames)
         results.vid_name.append([cfg.vid_name])
@@ -185,7 +181,7 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
     cfg.ws = ws
     cfg.wt = wt
     cfg.sigma = sigma
-    cfg.isize = "128_128" # a fixed training parameters
+    cfg.isize = "512_512" # a fixed training parameters
     cfg.ca_fwd = ca_fwd
 
     # -- read cache --
@@ -236,14 +232,19 @@ def main():
 
     # -- get defaults --
     cfg = configs.default_test_vid_cfg()
+    # cfg.isize = "128_128"
     # cfg.isize = "256_256"
-    cfg.isize = "128_128"
+    cfg.isize = "512_512"
     # cfg.isize = "none"#"128_128"
     cfg.bw = True
     cfg.nframes = 3
     cfg.frame_start = 0
     cfg.frame_end = cfg.frame_start+cfg.nframes-1
     cfg.attn_mode = "dnls_k"
+    # cfg.aug_test = True
+    # cfg.aug_refine_inds = True
+    cfg.arch_return_inds = True
+    cfg.burn_in = True
 
     # -- processing --
     cfg.spatial_crop_size = "none"
@@ -255,12 +256,10 @@ def main():
     # -- get mesh --
     dnames,sigmas = ["set8"],[30]#,30.]
     # vid_names = ["tractor"]
-    # vid_names = ["sunflower"]
+    vid_names = ["sunflower"]
     # vid_names = ["sunflower","hypersmooth","tractor"]
-    vid_names = ["snowboard","sunflower","tractor","motorbike",
-                 "hypersmooth","park_joy","rafting","touchdown"]
-    internal_adapt_nsteps = [300]
-    internal_adapt_nepochs = [0]
+    # vid_names = ["snowboard","sunflower","tractor","motorbike",
+    #              "hypersmooth","park_joy","rafting","touchdown"]
 
     # -- standard --
     # ws,wt = [27],[3]
@@ -269,12 +268,11 @@ def main():
     # cfg.refine_inds = "f-f-f"
 
     # -- prop0 --
-    ws,wt = ['27-3-3'],['3-0-0']
     cfg.k_s = 100
     cfg.k_a = 100
     cfg.ws = 27
     cfg.wt = 3
-    cfg.ws_r = 1
+    cfg.ws_r = '1-1-1'
     # cfg.k_a = 50
     # cfg.refine_inds = "f-f-f"
 
@@ -291,44 +289,41 @@ def main():
     # cfg.k_a = '100-100-100'
     # cfg.refine_inds = "f-f-f"
 
-    k,sb = [100],[48*1024]#1024*1]
-    flow,isizes,adapt_mtypes = ["true"],["none"],["rand"]
+    k = [100]
+    flow = ["true"]
     ca_fwd_list,use_train = ["dnls_k"],["true"]
-    refine_inds = ["f-f-f","f-f-t","f-t-f","f-t-t"]
+    # refine_inds = ["f-f-f","f-f-t","f-t-f","f-t-t"]
+    # aug_test = ["false"]
+    refine_inds = ["t-t-t"]#,"f-f-f"]
+    aug_test = ["false","true"]
+    aug_refine_inds = ["true"]
+    # aug_test = ["false","true"]
+    # aug_refine_inds = ["false","true"]
     model_type = ['augmented']
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
-                 "internal_adapt_nsteps":internal_adapt_nsteps,
-                 "internal_adapt_nepochs":internal_adapt_nepochs,
-                 "flow":flow,"ws":ws,"wt":wt,"adapt_mtype":adapt_mtypes,
-                 "isize":isizes,"use_train":use_train,"ca_fwd":ca_fwd_list,
-                 "ws":ws,"wt":wt,"k":k, "sb":sb, "use_chop":["false"],
-                 "model_type":model_type,"refine_inds":refine_inds}
+                 "flow":flow,"use_train":use_train,"ca_fwd":ca_fwd_list,
+                 "k":k, "use_chop":["false"],
+                 "model_type":model_type,"refine_inds":refine_inds,
+                 "aug_refine_inds":aug_refine_inds,"aug_test":aug_test}
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
     cache_io.append_configs(exps_a,cfg) # merge the two
 
-    # cfg.attn_mode = "dnls_k"
-    # cfg.ws = "27-5-5"
-    # cfg.wt = "3-0-0"
-    # cfg.k_s = '500-500-100'
-    # cfg.k_a = 100
-    # cfg.refine_inds = "f-t-t"
-    # exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
-    # cache_io.append_configs(exps_a,cfg) # merge the two
-
     # -- original w/out training --
     cfg.ws = 27
+    # exp_lists['model_type'] = ['original']
+    exp_lists['sb'] = [48*1024]
     exp_lists['model_type'] = ['refactored']
     exp_lists['flow'] = ["false"]
     exp_lists['use_train'] = ["false"]#,"true"]
     exp_lists['ca_fwd'] = ["default"]
     exp_lists['use_chop'] = ["false"]
-    exp_lists['sb'] = [1]
     exps_b = cache_io.mesh_pydicts(exp_lists) # create mesh
     cfg.bw = True
     cache_io.append_configs(exps_b,cfg) # merge the two
 
     # -- cat exps --
     exps = exps_a# + exps_b
+    # exps = exps_b
 
     # -- run exps --
     nexps = len(exps)
@@ -347,6 +342,7 @@ def main():
         clear_exp = exp.attn_mode == "dnls_k" and exp.model_type == "refactored"
         clear_exp = clear_exp and (exp.ws != 27)
         clear_exp = clear_exp or ('t' in exp.refine_inds)
+        cache.clear_exp(uuid)
         # if clear_exp:
         #     cache.clear_exp(uuid)
         # if exp.use_chop == "false" and exp.ca_fwd != "dnls_k":
@@ -371,40 +367,41 @@ def main():
     for use_train,tdf in records.groupby("use_train"):
         for ca_group,gdf in tdf.groupby("refine_inds"):
             for use_chop,cdf in gdf.groupby("use_chop"):
-                for sigma,sdf in cdf.groupby("sigma"):
-                    print("--- %d ---" % sigma)
-                    for use_flow,fdf in sdf.groupby("flow"):
-                        agg_psnrs,agg_ssims,agg_dtime = [],[],[]
-                        agg_mem_res,agg_mem_alloc = [],[]
-                        print("--- %s (%s,%s,%s) ---" %
-                              (ca_group,use_train,use_flow,use_chop))
-                        for vname,vdf in fdf.groupby("vid_name"):
-                            psnrs = np.stack(vdf['psnrs'])
-                            dtime = np.stack(vdf['timer_deno'])
-                            mem_alloc = np.stack(vdf['mem_alloc'])
-                            mem_res = np.stack(vdf['mem_res'])
-                            ssims = np.stack(vdf['ssims'])
-                            psnr_mean = psnrs.mean().item()
-                            ssim_mean = ssims.mean().item()
-                            uuid = vdf['uuid'].iloc[0]
-                            # print(dtime,mem_gb)
-                            # print(vname,psnr_mean,ssim_mean,uuid)
-                            args = (vname,psnr_mean,ssim_mean,uuid)
-                            print("%13s: %2.3f %1.3f %s" % args)
-                            agg_psnrs.append(psnr_mean)
-                            agg_ssims.append(ssim_mean)
-                            agg_mem_res.append(mem_res.mean().item())
-                            agg_mem_alloc.append(mem_alloc.mean().item())
-                            agg_dtime.append(dtime.mean().item())
-                        psnr_mean = np.mean(agg_psnrs)
-                        ssim_mean = np.mean(agg_ssims)
-                        dtime_mean = np.mean(agg_dtime)
-                        mem_res_mean = np.mean(agg_mem_res)
-                        mem_alloc_mean = np.mean(agg_mem_alloc)
-                        uuid = gdf['uuid']
-                        params = ("Ave",psnr_mean,ssim_mean,dtime_mean,
-                                  mem_res_mean,mem_alloc_mean)
-                        print("%13s: %2.3f %1.3f %2.3f %2.3f %2.3f" % params)
+                for aug_test,adf in cdf.groupby("aug_test"):
+                    for sigma,sdf in adf.groupby("sigma"):
+                        print("--- %d ---" % sigma)
+                        for use_flow,fdf in sdf.groupby("flow"):
+                            agg_psnrs,agg_ssims,agg_dtime = [],[],[]
+                            agg_mem_res,agg_mem_alloc = [],[]
+                            print("--- %s (%s,%s,%s,%s) ---" %
+                                  (ca_group,use_train,use_flow,use_chop,aug_test))
+                            for vname,vdf in fdf.groupby("vid_name"):
+                                psnrs = np.stack(vdf['psnrs'])
+                                dtime = np.stack(vdf['timer_deno'])
+                                mem_alloc = np.stack(vdf['mem_alloc'])
+                                mem_res = np.stack(vdf['mem_res'])
+                                ssims = np.stack(vdf['ssims'])
+                                psnr_mean = psnrs.mean().item()
+                                ssim_mean = ssims.mean().item()
+                                uuid = vdf['uuid'].iloc[0]
+                                # print(dtime,mem_gb)
+                                # print(vname,psnr_mean,ssim_mean,uuid)
+                                args = (vname,psnr_mean,ssim_mean,uuid)
+                                print("%13s: %2.3f %1.3f %s" % args)
+                                agg_psnrs.append(psnr_mean)
+                                agg_ssims.append(ssim_mean)
+                                agg_mem_res.append(mem_res.mean().item())
+                                agg_mem_alloc.append(mem_alloc.mean().item())
+                                agg_dtime.append(dtime.mean().item())
+                            psnr_mean = np.mean(agg_psnrs)
+                            ssim_mean = np.mean(agg_ssims)
+                            dtime_mean = np.mean(agg_dtime)
+                            mem_res_mean = np.mean(agg_mem_res)
+                            mem_alloc_mean = np.mean(agg_mem_alloc)
+                            uuid = gdf['uuid']
+                            params = ("Ave",psnr_mean,ssim_mean,dtime_mean,
+                                      mem_res_mean,mem_alloc_mean)
+                            print("%13s: %2.3f %1.3f %2.3f %2.3f %2.3f" % params)
 
 
 if __name__ == "__main__":

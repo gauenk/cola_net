@@ -11,6 +11,7 @@ from easydict import EasyDict as edict
 # -- modules --
 from . import shared_mods
 from . import inds_buffer
+from ..utils.timer import ExpTimer,AggTimer
 
 # -- modules --
 from colanet.utils import clean_code
@@ -30,7 +31,7 @@ class RR(nn.Module):
         n_resblocks = 16  # args.n_resblocks
         n_feats = 64  # args.n_feats
         kernel_size = 3
-        self.return_inds = args.return_inds
+        self.return_inds = args.arch_return_inds
         self.n_resblocks = n_resblocks
         if search_cfg is None: search_cfg = {}
 
@@ -40,7 +41,8 @@ class RR(nn.Module):
 
         # -- init --
         msa = CES(in_channels=n_feats,num=args.stages,
-                  return_inds=args.return_inds,search_cfg=search_cfg)
+                  return_inds=args.arch_return_inds,search_cfg=search_cfg)
+        self.msa = msa
         m_head = [conv(args.n_colors, n_feats, kernel_size)]
         m_body = []
         for _ in range(n_resblocks // 2):
@@ -63,16 +65,25 @@ class RR(nn.Module):
         self.use_inds_buffer = self.return_inds
         self.inds_buffer = []
 
-    def forward(self, x, flows=None):
+    @property
+    def times(self):
+        return self.msa.times
+
+    def reset_times(self):
+        self.msa.reset_times()
+
+    def forward(self, x, flows=None, inds=None):
         res = x
         res = self.head(res)
         for _name,layer in self.body.named_children():
-            if int(_name) == 8: res,inds = layer(res,flows)
+            if int(_name) == 8: res,inds = layer(res,flows,inds)
             else: res = layer(res)
         res = self.tail(res)
-        self.update_inds_buffer(inds)
+        self.inds_buffer = inds
+        # self.update_inds_buffer(inds)
         return x+res
 
+@clean_code.add_methods_from(inds_buffer)
 class CES(nn.Module):
 
     def __init__(self,in_channels,num=6,
@@ -102,13 +113,37 @@ class CES(nn.Module):
         kwargs['search_cfg'] = search_cfg_l[2]
         self.c3 = merge_block(**kwargs)
         self.return_inds = return_inds
+        self.use_inds_buffer = return_inds
+        self.times = AggTimer()
 
-    def forward(self, x, flows=None):
-        out,inds0 = self.c1(x,flows)
-        out = self.RBS1(out)
-        out,inds1 = self.c2(out,flows,inds0)
-        out = self.RBS2(out)
-        out,inds2 = self.c3(out,flows,inds1)
+    def reset_times(self):
+        self._reset_times()
+        for i in range(3):
+            layer_i = getattr(self,'c%d'%(i+1))
+            layer_i.reset_times()
+
+    def update_ca_times(self):
+        for i in range(3):
+            layer_i = getattr(self,'c%d'%(i+1))
+            self.update_timer(layer_i.times)
+            layer_i.reset_times()
+
+    def forward(self, x, flows=None, inds=None):
+        self.clear_inds_buffer()
+        if not(inds is None):
+            inds0,inds1,inds2 = inds[0],inds[1],inds[2]
+            out,inds0 = self.c1(x,flows,inds0)
+            out = self.RBS1(out)
+            out,inds1 = self.c2(out,flows,inds1)
+            out = self.RBS2(out)
+            out,inds2 = self.c3(out,flows,inds2)
+        else:
+            out,inds0 = self.c1(x,flows,inds)
+            out = self.RBS1(out)
+            out,inds1 = self.c2(out,flows,inds0)
+            out = self.RBS2(out)
+            out,inds2 = self.c3(out,flows,inds1)
         inds = self.format_inds(inds0,inds1,inds2)
+        self.update_ca_times()
         return out,inds
 

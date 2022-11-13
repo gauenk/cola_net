@@ -12,16 +12,18 @@ import colanet
 from colanet.utils import optional
 from torch.nn.functional import unfold as th_unfold
 from .tiling import *
-from colanet.utils import ExpTimer
+from colanet.utils import ExpTimer,AggTimer
 
 # -- modules --
 from . import inds_buffer
+from . import attn_mods
 from colanet.utils import clean_code
 
 
 """
 CA network
 """
+@clean_code.add_methods_from(attn_mods)
 @clean_code.add_methods_from(inds_buffer)
 class ContextualAttention_Enhance(nn.Module):
 
@@ -61,8 +63,30 @@ class ContextualAttention_Enhance(nn.Module):
         self.phi = nn.Conv2d(in_channels=self.in_channels,
                              out_channels=self.inter_channels,
                              kernel_size=1, stride=1, padding=0)
+
+        # -- assign --
+        self.attn_mode = attn_mode
+        self.k_s = k_s
         self.k_a = k_a
+        self.ps = ps
+        self.pt = pt
+        self.ws = ws
+        self.ws_r = ws_r
+        self.wt = wt
+        self.stride0 = stride0
+        self.stride1 = stride1
+        self.dilation = dilation
+        self.rbwd = rbwd
+        self.nbwd = nbwd
+        self.exact = exact
+        self.reflect_bounds = reflect_bounds
         self.refine_inds = refine_inds
+        self.search_kwargs = {"attn_mode":attn_mode,"k":k_s,"ps":ps,
+                              "pt":pt,"ws":ws,"ws_r":ws_r,"wt":wt,
+                              "stride0":stride0,"stride1":stride1,
+                              "dilation":dilation,"rbwd":rbwd,"nbwd":nbwd,
+                              "exact":exact,"reflect_bounds":reflect_bounds,
+                              "refine_inds":refine_inds}
         self.search = self.init_search(attn_mode=attn_mode,k=k_s,ps=ps,pt=pt,
                                        ws=ws,ws_r=ws_r,wt=wt,
                                        stride0=stride0,stride1=stride1,
@@ -71,103 +95,32 @@ class ContextualAttention_Enhance(nn.Module):
                                        refine_inds=refine_inds)
         self.wpsum = self.init_wpsum(ps=ps,pt=pt,dilation=dilation,
                                      reflect_bounds=reflect_bounds,exact=exact)
-    def init_search(self,**kwargs):
-        attn_mode = optional(kwargs,"attn_mode","dnls_k")
-        refine_inds = optional(kwargs,"refine_inds",False)
-        cfg = dcopy(kwargs)
-        del cfg["attn_mode"]
-        del cfg["refine_inds"]
-        if attn_mode == "dnls_k":
-            if refine_inds: return self.init_refine(**cfg)
-            else: return self.init_dnls_k(**cfg)
-        else:
-            raise ValueError(f"Uknown attn_mode [{attn_mode}]")
-
-    def init_refine(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,
-                    stride0=4,stride1=1,dilation=1,rbwd=True,nbwd=1,exact=False,
-                    reflect_bounds=False):
-        use_k = k > 0
-        search_abs = False
-        fflow,bflow = None,None
-        oh0,ow0,oh1,ow1 = 1,1,3,3
-        nheads = 1
-        anchor_self = False
-        use_self = anchor_self
-        search = dnls.search.init("prod_refine", k, ps, pt, ws_r, ws, nheads,
-                                  chnls=-1,dilation=dilation,
-                                  stride0=stride0, stride1=stride1,
-                                  reflect_bounds=reflect_bounds,use_k=use_k,
-                                  search_abs=search_abs,use_adj=True,
-                                  anchor_self=anchor_self,use_self=use_self,
-                                  exact=exact)
-        return search
-
-    def init_dnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
-                    dilation=1,rbwd=True,nbwd=1,exact=False,
-                    reflect_bounds=False):
-        use_k = k > 0
-        search_abs = False
-        fflow,bflow = None,None
-        oh0,ow0,oh1,ow1 = 1,1,3,3
-        anchor_self = True
-        use_self = anchor_self
-        search = dnls.search.init("prod_with_index", fflow, bflow,
-                                  k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
-                                  dilation=dilation, stride0=stride0,stride1=stride1,
-                                  reflect_bounds=reflect_bounds,use_k=use_k,
-                                  use_adj=True,search_abs=search_abs,
-                                  rbwd=rbwd,nbwd=nbwd,exact=exact,
-                                  anchor_self=anchor_self,use_self=use_self)
-        return search
-
-    def init_wpsum(self,ps=7,pt=0,dilation=1,reflect_bounds=False,
-                   rbwd=True,nbwd=1,exact=False):
-        wpsum = dnls.reducers.WeightedPatchSumHeads(ps, pt, h_off=0, w_off=0,
-                                                    dilation=dilation,
-                                                    reflect_bounds=reflect_bounds,
-                                                    adj=0, exact=exact,
-                                                    rbwd=rbwd,nbwd=nbwd)
-        return wpsum
-
-    def init_ifold(self,vshape,device):
-        rbounds = self.search.reflect_bounds
-        stride0,dil = self.search.stride0,self.search.dilation
-        ifold = dnls.iFoldz(vshape,None,stride=stride0,dilation=dil,
-                            adj=0,only_full=False,use_reflect=rbounds,device=device)
-        return ifold
-
-    def batching_info(self,vshape):
-        B,T,C,H,W = vshape
-        stride0 = self.stride0
-        nH,nW = (H-1)//stride0+1,(W-1)//stride0+1
-        npix = H * W
-        ntotal = T * nH * nW
-        if self.bs is None:
-            div = 2 if npix >= (540 * 960) else 1
-            nbatch = ntotal//(T*div)
-        elif self.bs == -1:
-            nbatch = ntotal
-        else:
-            nbatch = self.bs
-        nbatches = (ntotal-1) // nbatch + 1
-        return nbatch,nbatches,ntotal
+        self.times = AggTimer()
 
     def forward(self, vid, flows=None, inds_pred=None):
 
-        # -- get images --
-        b1 = self.g(vid)[None,:]
-        b2 = self.theta(vid)[None,:]
-        b3 = self.phi(vid)[None,:]
+
+        # -- new dim --
         vid = vid[None,:]
         B = vid.shape[0]
+
+        # -- init inds & search --
         self.clear_inds_buffer()
+        self.update_search(inds_pred is None)
 
         # -- init timer --
-        use_timer = False
+        use_timer = True
         timer = ExpTimer(use_timer)
 
         # -- batching params --
         nbatch,nbatches,ntotal = self.batching_info(vid.shape)
+
+        # -- get images --
+        timer.sync_start("extract")
+        b1 = self.g(vid[0])[None,:]
+        b2 = self.theta(vid[0])[None,:]
+        b3 = self.phi(vid[0])[None,:]
+        timer.sync_stop("extract")
 
         # -- init & update --
         ifold = self.init_ifold(b1.shape,b1.device)
@@ -237,6 +190,11 @@ class ContextualAttention_Enhance(nn.Module):
         inds = self.get_inds_buffer()
         # print("[final] inds.shape: ",inds.shape)
         self.clear_inds_buffer()
+
+        # -- viz --
+        if timer.use_timer:
+            # print(timer)
+            self.update_timer(timer)
 
         return y,inds
 

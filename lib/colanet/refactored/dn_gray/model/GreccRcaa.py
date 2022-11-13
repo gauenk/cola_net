@@ -163,9 +163,9 @@ class CES(nn.Module):
         self.c1 = merge_block(in_channels = in_channels,out_channels=in_channels)#CE(in_channels=in_channels)
         self.c2 = merge_block(in_channels = in_channels,out_channels=in_channels)#CE(in_channels=in_channels)
         self.c3 = merge_block(in_channels = in_channels,out_channels=in_channels)
-        # self.ca_forward_type = "default"#dnls_k"
+        self.ca_forward_type = "default"#dnls_k"
         # self.ca_forward_type = "dnls"
-        self.ca_forward_type = "dnls_k"
+        # self.ca_forward_type = "dnls_k"
         self.ws = 29
         self.wt = 0
         self.k = 100

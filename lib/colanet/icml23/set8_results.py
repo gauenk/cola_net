@@ -114,7 +114,7 @@ def load_results(cfg,vid_names):
                  "model_type":model_type,"vid_name":vid_names}
     exps = cache_io.mesh_pydicts(exp_lists) # create mesh
     cache_io.append_configs(exps,cfg)
-    pp.pprint(exps[0])
+    # pp.pprint(exps[0])
 
     # -- read --
     root = Path("./.cvpr23")

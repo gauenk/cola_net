@@ -1,5 +1,7 @@
 import time
 import torch as th
+import numpy as np
+
 
 class ExpTimer():
 
@@ -19,6 +21,12 @@ class ExpTimer():
         idx = self.names.index(name)
         total_time = self.times[idx]
         return total_time
+
+    def __setitem__(self,name,time):
+        if name in self.names:
+            raise KeyError(f"Already set key [{name}]")
+        self.names.append(name)
+        self.times.append(time)
 
     def items(self):
         names = ["timer_%s" % name for name in self.names]
@@ -50,6 +58,18 @@ class ExpTimer():
         start_time = self.start_times[idx]
         exec_time = end_time - start_time
         self.times.append(exec_time)
+
+class AggTimer(ExpTimer):
+
+    def __init__(self,use_timer=True):
+        super().__init__(use_timer)
+
+    def __str__(self):
+        msg = "--- Exp Times ---"
+        for k,v in self.items():
+            msg += "\n%s: %2.3f\n" % (k,np.sum(v))
+        return msg
+
 
 
 class TimeIt():

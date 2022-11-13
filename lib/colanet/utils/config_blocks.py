@@ -1,3 +1,4 @@
+from easydict import EasyDict as edict
 
 def config_to_list(search_cfg,nblocks=3):
 

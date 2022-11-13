@@ -10,7 +10,7 @@ from . import augmented
 
 # -- publication api --
 from . import aaai23
-from . import cvpr23
+from . import icml23
 
 # -- model api --
 from .utils import optional
