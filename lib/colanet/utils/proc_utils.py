@@ -89,6 +89,8 @@ def get_spatial_chunk_flow(flows,h_chunk,w_chunk,ssize):
     return out_flows
 
 def get_temporal_chunk_flow(flows,t_slice):
+    if flows is None:
+        return None
     out_flows = edict()
     out_flows.fflow = flows.fflow[...,t_slice,:,:,:].contiguous().clone()
     out_flows.bflow = flows.bflow[...,t_slice,:,:,:].contiguous().clone()

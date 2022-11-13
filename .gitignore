@@ -1,5 +1,7 @@
 .cache_io
 output
+weights/*
+weight/*
 build/*
 cmake/*
 data/*
