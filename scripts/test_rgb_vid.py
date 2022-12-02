@@ -93,15 +93,19 @@ def run_exp(_cfg):
         region = sample['region']
         noisy,clean = sample['noisy'],sample['clean']
         noisy,clean = noisy.to(cfg.device),clean.to(cfg.device)
+        print(th.mean((noisy - clean)**2))
         vid_frames = sample['fnums'].numpy()
         print("[%d] noisy.shape: " % index,noisy.shape)
         temporal_chop = noisy.shape[0] > 20
         temporal_chop = temporal_chop and not(use_chop)
+        noisy,clean = noisy[...,:1,:,:],clean[...,:1,:,:]
 
         # -- optional crop --
         noisy = rslice(noisy,region)
         clean = rslice(clean,region)
         print("[%d] noisy.shape: " % index,noisy.shape)
+        noisy_psnrs = colanet.utils.metrics.compute_psnrs(noisy,clean,div=imax)
+        print(noisy_psnrs)
 
         # -- create timer --
         timer = colanet.utils.timer.ExpTimer()
@@ -147,6 +151,8 @@ def run_exp(_cfg):
         # colanet.utils.io.save_burst(clean,out_dir,"clean")
 
         # -- psnr --
+        print(noisy.min(),noisy.max())
+        print(clean.min(),clean.max())
         noisy_psnrs = colanet.utils.metrics.compute_psnrs(noisy,clean,div=imax)
         psnrs = colanet.utils.metrics.compute_psnrs(deno,clean,div=imax)
         ssims = colanet.utils.metrics.compute_ssims(deno,clean,div=imax)
@@ -239,15 +245,16 @@ def main():
     # -- get cache --
     cache_dir = ".cache_io"
     # cache_name = "test_rgb_net" # best results (aaai23)
-    cache_name = "test_rgb_net_cvpr23" # best results
+    # cache_name = "test_rgb_net_cvpr23" # best results
+    cache_name = "test_rgb_net_icml23" # best results
     cache = cache_io.ExpCache(cache_dir,cache_name)
     # cache.clear()
 
     # -- get defaults --
     cfg = configs.default_test_vid_cfg()
     # cfg.isize = "128_128"
-    # cfg.isize = "256_256"
-    cfg.isize = "512_512"
+    cfg.isize = "256_256"
+    # cfg.isize = "512_512"
     # cfg.isize = "none"#"128_128"
     cfg.bw = True
     cfg.nframes = 5
@@ -258,6 +265,7 @@ def main():
     # cfg.aug_refine_inds = True
     cfg.arch_return_inds = True
     cfg.burn_in = True
+    cfg.burn_in = False
 
     # -- processing --
     cfg.spatial_crop_size = "none"
@@ -267,13 +275,18 @@ def main():
 
 
     # -- get mesh --
-    dnames,sigmas = ["set8"],[30,50]
+    dnames = ["set8"]
+    sigmas = [30]
     # vid_names = ["tractor"]
     vid_names = ["sunflower","tractor","park_joy"]
     # vid_names = ["sunflower"]
     # vid_names = ["sunflower","hypersmooth","tractor"]
     # vid_names = ["snowboard","sunflower","tractor","motorbike",
     #              "hypersmooth","park_joy","rafting","touchdown"]
+
+    # -- new mesh --
+    dnames = ["submillilux_real"]
+    vid_names = ["0"]
 
     # -- standard --
     # ws,wt = [27],[3]
@@ -282,8 +295,10 @@ def main():
     # cfg.refine_inds = "f-f-f"
 
     # -- prop0 --
-    cfg.k_s = 100
-    cfg.k_a = 100
+    # cfg.k_s = 100
+    # cfg.k_a = 100
+    cfg.k_s = 80
+    cfg.k_a = 80
     cfg.ws = 27
     cfg.wt = 3
     # cfg.ws_r = '1-1-1'
@@ -303,41 +318,54 @@ def main():
     # cfg.k_a = '100-100-100'
     # cfg.refine_inds = "f-f-f"
 
-    k = [100]
     flow = ["true"]
     ca_fwd_list,use_train = ["dnls_k"],["true"]
     # refine_inds = ["f-f-f","f-f-t","f-t-f","f-t-t"]
     # aug_test = ["false"]
-    refine_inds = ["f-f-f","t-t-t","f-f-t"]
+    # refine_inds = ["f-f-f","t-t-t","f-f-t"]
+    refine_inds = ["f-f-f","t-t-t"]
     aug_test = ["false","true"]
     aug_refine_inds = ["true"]
+    ws_r = [1]
     # aug_test = ["false","true"]
     # aug_refine_inds = ["false","true"]
+    # ws_r = [1,3]
     model_type = ['augmented']
-    ws_r = [1,3]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "flow":flow,"use_train":use_train,"ca_fwd":ca_fwd_list,
-                 "k":k, "use_chop":["false"],"ws_r":ws_r,
+                 "use_chop":["false"],"ws_r":ws_r,
                  "model_type":model_type,"refine_inds":refine_inds,
                  "aug_refine_inds":aug_refine_inds,"aug_test":aug_test}
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
     cache_io.append_configs(exps_a,cfg) # merge the two
 
-    # -- original w/out training --
-    cfg.ws = 27
-    # exp_lists['model_type'] = ['original']
-    exp_lists['sb'] = [48*1024]
-    exp_lists['model_type'] = ['refactored']
-    exp_lists['flow'] = ["false"]
-    exp_lists['use_train'] = ["false"]#,"true"]
-    exp_lists['ca_fwd'] = ["default"]
-    exp_lists['use_chop'] = ["false"]
+
+    # -- compare with smaller search --
+    # exp_lists['vid_names'] = ["sunflower"]
+    exp_lists['aug_test'] = ["false","true"]
+    exp_lists['refine_inds'] = ["f-f-f"]
+    exp_lists['ws_r'] = [-1]
+    cfg.ws = '27-9-9'
+    cfg.wt = '3-0-0'
     exps_b = cache_io.mesh_pydicts(exp_lists) # create mesh
-    cfg.bw = True
     cache_io.append_configs(exps_b,cfg) # merge the two
 
+    # # -- original w/out training --
+    # cfg.ws = 27
+    # # exp_lists['model_type'] = ['original']
+    # exp_lists['k'] = [100]
+    # exp_lists['sb'] = [48*1024]
+    # exp_lists['model_type'] = ['refactored']
+    # exp_lists['flow'] = ["false"]
+    # exp_lists['use_train'] = ["false"]#,"true"]
+    # exp_lists['ca_fwd'] = ["default"]
+    # exp_lists['use_chop'] = ["false"]
+    # exps_c = cache_io.mesh_pydicts(exp_lists) # create mesh
+    # cfg.bw = True
+    # cache_io.append_configs(exps_b,cfg) # merge the two
+
     # -- cat exps --
-    exps = exps_a# + exps_b
+    exps = exps_a + exps_b
     # exps = exps_b
 
     # -- run exps --
@@ -357,6 +385,8 @@ def main():
         clear_exp = exp.attn_mode == "dnls_k" and exp.model_type == "refactored"
         clear_exp = clear_exp and (exp.ws != 27)
         clear_exp = clear_exp or ('t' in exp.refine_inds)
+        if "submillilux" in exp.dname:
+            cache.clear_exp(uuid)
         # cache.clear_exp(uuid)
         # if clear_exp:
         #     cache.clear_exp(uuid)
@@ -379,11 +409,13 @@ def main():
     # print(records.filter(like="timer"))
 
     # -- neat report --
-    fields = ['use_train','refine_inds','use_chop','aug_test','sigma','vid_name']
-    fields_summ = ['use_train','refine_inds','use_chop','aug_test']
-    res_fields = ['psnrs','ssims','timer_deno','timer_extract',
-                  'timer_search','timer_agg','mem_alloc','mem_res']
-    res_fmt = ['%2.3f','%1.3f','%2.3f','%2.3f','%2.3f','%2.3f','%2.3f','%2.3f']
+    fields = ['use_train','refine_inds','use_chop','aug_test','sigma','vid_name','ws','ws_r','wt']
+    fields_summ = ['use_train','refine_inds','use_chop','aug_test','ws','ws_r','wt']
+    res_fields = ['psnrs','ssims','timer_deno','mem_alloc','mem_res']
+    res_fmt = ['%2.3f','%1.3f','%2.3f','%2.3f','%2.3f','%2.3f']
+    # res_fields = ['psnrs','ssims','timer_deno','timer_extract',
+    #               'timer_search','timer_agg','mem_alloc','mem_res']
+    # res_fmt = ['%2.3f','%1.3f','%2.3f','%2.3f','%2.3f','%2.3f','%2.3f','%2.3f']
 
     # -- run agg --
     agg = {key:[np.stack] for key in res_fields}

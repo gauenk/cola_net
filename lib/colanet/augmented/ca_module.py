@@ -109,7 +109,7 @@ class ContextualAttention_Enhance(nn.Module):
         self.update_search(inds_pred is None)
 
         # -- init timer --
-        use_timer = True
+        use_timer = False
         timer = ExpTimer(use_timer)
 
         # -- batching params --
@@ -125,6 +125,7 @@ class ContextualAttention_Enhance(nn.Module):
         # -- init & update --
         ifold = self.init_ifold(b1.shape,b1.device)
         if not(self.refine_inds):
+            # print(vid.shape,flows.fflow.shape,flows.bflow.shape)
             self.search.update_flow(vid.shape,vid.device,flows)
 
         # -- batch across queries --
