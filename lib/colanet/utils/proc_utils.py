@@ -86,6 +86,11 @@ def get_spatial_chunk_flow(flows,h_chunk,w_chunk,ssize):
     out_flows = edict()
     out_flows.fflow = flows.fflow[...,h_chunk:h_chunk+ssize,w_chunk:w_chunk+ssize]
     out_flows.bflow = flows.bflow[...,h_chunk:h_chunk+ssize,w_chunk:w_chunk+ssize]
+
+    # -- contig --
+    out_flows.fflow = out_flows.fflow.contiguous().clone()
+    out_flows.bflow = out_flows.bflow.contiguous().clone()
+
     return out_flows
 
 def get_temporal_chunk_flow(flows,t_slice):
@@ -126,7 +131,7 @@ def spatial_chop(ssize,overlap,fwd_fxn,vid,flows=None,verbose=False):
     return deno
 
 
-def temporal_chop(tsize,overlap,fwd_fxn,vid,flows=None,verbose=False):
+def temporal_chop(tsize,overlap,fwd_fxn,vid,flows=None,verbose=True):
     """
     overlap is a __percent__
     """

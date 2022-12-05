@@ -7,6 +7,7 @@ from . import configs
 from . import lightning
 from . import flow
 from . import augmented
+from .augmented import extract_model_config
 
 # -- publication api --
 from . import aaai23

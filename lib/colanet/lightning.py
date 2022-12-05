@@ -18,7 +18,6 @@ from easydict import EasyDict as edict
 import data_hub
 
 # -- optical flow --
-# import svnlb
 from colanet import flow
 
 # -- caching results --
@@ -47,28 +46,18 @@ from pytorch_lightning.utilities.distributed import rank_zero_only
 
 class ColaNetLit(pl.LightningModule):
 
-    def __init__(self,mtype,sigma,batch_size=1,flow=True,
-                 ensemble=False,ca_fwd="dnls_k",isize=None,bw=False,
-                 ws=29,wt=0,k=100,rand_bwd=True):
+    def __init__(self,model_cfg,batch_size=1,flow=True,
+                 ensemble=False,isize=None,bw=False):
         super().__init__()
-        self.mtype = mtype
-        self.sigma = sigma
+        self._model = [colanet.load_model(model_cfg)]
         self.bw = bw
-        self.nchnls = 1 if bw else 3
-        self._model = [colanet.refactored.load_model(mtype,sigma,2,self.nchnls)]
-        self.net = self._model[0].model
-        self.net.body[8].ca_forward_type = ca_fwd
-        self.net.body[8].ws = ws
-        self.net.body[8].wt = wt
-        self.net.body[8].k = k
-        self.net.body[8].exact = False
-        self.net.body[8].rand_bwd = rand_bwd
+        self.net = self._model[0]#.model
         self.batch_size = batch_size
         self.flow = flow
         self.isize = isize
         self.gen_loger = logging.getLogger('lightning')
-        self.gen_loger.setLevel("INFO")
-        self.ca_fwd = ca_fwd
+        self.gen_loger.setLevel("NOTSET")
+        self.ca_fwd = "dnls_k"
 
     def forward(self,vid):
         if self.ca_fwd == "dnls_k" or self.ca_fwd == "dnls":
@@ -81,7 +70,7 @@ class ColaNetLit(pl.LightningModule):
 
     def forward_dnls_k(self,vid):
         flows = self._get_flow(vid)
-        deno = self.net(vid,flows=flows,region=None)
+        deno = self.net(vid,flows=flows)
         deno = th.clamp(deno,0.,1.)
         return deno
 
@@ -98,16 +87,11 @@ class ColaNetLit(pl.LightningModule):
 
     def _get_flow(self,vid):
         if self.flow == True:
-            # noisy_np = vid.cpu().numpy()
-            # if noisy_np.shape[1] == 1:
-            #     noisy_np = np.repeat(noisy_np,3,axis=1)
-            # flows = svnlb.compute_flow(noisy_np,self.sigma)
-            # flows=edict({k:th.from_numpy(v).to(self.device) for k,v in flows.items()})
             est_sigma = flow.est_sigma(vid)
-            flows = flow.run(vid,est_sigma)
+            flows = flow.run_batch(vid[None,:],est_sigma)
         else:
             t,c,h,w = vid.shape
-            zflows = th.zeros((t,2,h,w)).to(self.device)
+            zflows = th.zeros((1,t,2,h,w)).to(self.device)
             flows = edict()
             flows.fflow,flows.bflow = zflows,zflows
         return flows
@@ -158,6 +142,7 @@ class ColaNetLit(pl.LightningModule):
         # -- get data --
         noisy = rslice(noisy,region)
         clean = rslice(clean,region)
+        # print("noisy.shape: ",noisy.shape)
 
         # -- foward --
         deno = self.forward(noisy)

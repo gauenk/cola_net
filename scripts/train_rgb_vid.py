@@ -16,9 +16,6 @@ from easydict import EasyDict as edict
 # -- data --
 import data_hub
 
-# -- optical flow --
-import svnlb
-
 # -- caching results --
 import cache_io
 
@@ -64,11 +61,10 @@ def launch_training(cfg):
         save_dir.mkdir(parents=True)
 
     # -- network --
-    rand_bwd = optional(cfg,'rand_bwd','true')
-    model = ColaNetLit(cfg.mtype,cfg.sigma,cfg.batch_size,
+    model_cfg = colanet.extract_model_config(cfg)
+    model = ColaNetLit(model_cfg,cfg.batch_size,
                        cfg.flow=="true",cfg.ensemble=="true",
-                       cfg.ca_fwd,cfg.isize,cfg.bw,
-                       cfg.ws,cfg.wt,cfg.k,rand_bwd=="true")
+                       cfg.isize,cfg.bw)
 
     # -- load dataset with testing mods isizes --
     model.isize = None
@@ -115,8 +111,10 @@ def launch_training(cfg):
     chkpt_fn = cfg.uuid + "-{epoch:02d}"
     cc_recent = ModelCheckpoint(monitor="epoch",save_top_k=10,mode="max",
                                 dirpath=cfg.checkpoint_dir,filename=chkpt_fn)
-    swa_callback = StochasticWeightAveraging(swa_lrs=1e-4)
-    trainer = pl.Trainer(gpus=2,precision=32,limit_train_batches=1.,
+    swa_callback = StochasticWeightAveraging(swa_lrs=cfg.lr_init)
+    trainer = pl.Trainer(accelerator="gpu",devices=cfg.ndevices,precision=32,
+                         accumulate_grad_batches=cfg.accumulate_grad_batches,
+                         limit_train_batches=cfg.limit_train_batches,
                          max_epochs=cfg.nepochs-1,log_every_n_steps=1,
                          logger=logger,gradient_clip_val=0.5,
                          callbacks=[checkpoint_callback,swa_callback,cc_recent])
@@ -193,11 +191,12 @@ def main():
     # cache_name = "train_rgb_net" # without "rand_bwd" option
     cache_name = "train_rgb_net_with_rand_bwd"  # _with_ "rand_bwd"
     cache = cache_io.ExpCache(cache_dir,cache_name)
-    # cache.clear()
+    cache.clear()
 
     # -- create exp list --
-    ws,wt,k = [20],[3],[100]
-    sigmas = [40.]#,30.,10.]
+    ws,wt,k = [15],[0],[100]
+    # ws,wt,k = [20],[3],[100]
+    sigmas = [30.]#,30.,10.]
     flow = ['false']
     isizes = ["128_128"]
     ca_fwd_list = ["dnls_k"]
@@ -222,16 +221,31 @@ def main():
     # -- agg --
     # exps = exps_a + exps_b
     # exps = exps_a + exps_b# + exps_c
-    exps = exps_a + exps_b
+    exps = exps_a# + exps_b
     nexps = len(exps)
 
     # -- group with default --
     cfg = configs.default_train_cfg()
-    cfg.nsamples_tr = 400
+    cfg.dname = "davis_cropped"
+    cfg.bw = False
+    cfg.n_colors = 3
+    cfg.nsamples_tr = 0
     cfg.nsamples_val = 30
-    cfg.nepochs = 40
-    cfg.persistent_workers = True
+    cfg.nepochs = 100
+    cfg.ndevices = 1
     cfg.batch_size = 4
+    cfg.batch_size_tr = 4//cfg.ndevices
+    cfg.batch_size_val = 1
+    cfg.batch_size_te = 1
+    # cfg.lr_init = 1e-4
+    cfg.lr_init = 1e-5
+    cfg.model_type = "augmented"
+    cfg.accumulate_grad_batches = 1
+    cfg.limit_train_batches = .25 # current 1hr
+    cfg.persistent_workers = True
+    cfg.pretrained_load = False
+    cfg.pretrained_path = "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt"
+    cfg.pretrained_type = "lit"
     cache_io.append_configs(exps,cfg) # merge the two
 
     # -- launch each experiment --

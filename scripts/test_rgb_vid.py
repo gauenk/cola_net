@@ -180,7 +180,7 @@ def run_exp(_cfg):
 def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
 
     # -- skip if needed --
-    if not(use_train == "true"): return
+    if not(use_train is True): return
 
     # -- open training cache info --
     cache_dir = ".cache_io"
@@ -247,33 +247,39 @@ def main():
     cfg = configs.default_test_vid_cfg()
     # cfg.isize = "128_128"
     # cfg.isize = "256_256"
-    cfg.isize = "512_512"
-    # cfg.isize = "none"#"128_128"
-    cfg.bw = True
+    # cfg.isize = "512_512"
+    cfg.isize = "none"#"128_128"
+    cfg.bw = False
+    cfg.n_colors = 3
     cfg.nframes = 5
     cfg.frame_start = 0
     cfg.frame_end = cfg.frame_start+cfg.nframes-1
     cfg.attn_mode = "dnls_k"
     # cfg.aug_test = True
     # cfg.aug_refine_inds = True
-    cfg.arch_return_inds = True
-    cfg.burn_in = True
+    # cfg.aug_refine_inds = False
+    cfg.return_inds = False
+    cfg.arch_return_inds = False
+    cfg.burn_in = False
+    cfg.flow = True
+    cfg.pretrained_load = True
+    cfg.pretrained_type = "lit"
 
     # -- processing --
-    cfg.spatial_crop_size = "none"
+    cfg.spatial_crop_size = 540
     cfg.spatial_crop_overlap = 0.#0.1
     cfg.temporal_crop_size = 5#cfg.nframes
     cfg.temporal_crop_overlap = 0/5.#4/5. # 3 of 5 frames
 
 
     # -- get mesh --
-    dnames,sigmas = ["set8"],[30,50]
+    dnames,sigmas = ["set8"],[30]
     # vid_names = ["tractor"]
-    vid_names = ["sunflower","tractor","park_joy"]
+    # vid_names = ["sunflower","tractor","park_joy"]
     # vid_names = ["sunflower"]
     # vid_names = ["sunflower","hypersmooth","tractor"]
-    # vid_names = ["snowboard","sunflower","tractor","motorbike",
-    #              "hypersmooth","park_joy","rafting","touchdown"]
+    vid_names = ["snowboard","sunflower","tractor","motorbike",
+                 "hypersmooth","park_joy","rafting","touchdown"]
 
     # -- standard --
     # ws,wt = [27],[3]
@@ -305,21 +311,29 @@ def main():
 
     k = [100]
     flow = ["true"]
-    ca_fwd_list,use_train = ["dnls_k"],["true"]
+    ca_fwd_list,use_train = ["dnls_k"],["false"]
     # refine_inds = ["f-f-f","f-f-t","f-t-f","f-t-t"]
     # aug_test = ["false"]
-    refine_inds = ["f-f-f","t-t-t","f-f-t"]
+    refine_inds = ["f-f-f"]
+    # refine_inds = ["f-f-f","t-t-t","f-f-t"]
     aug_test = ["false","true"]
-    aug_refine_inds = ["true"]
+    # aug_test = ["false","true"]
+    aug_refine_inds = ["false"]
+    # aug_refine_inds = ["true"]
     # aug_test = ["false","true"]
     # aug_refine_inds = ["false","true"]
     model_type = ['augmented']
-    ws_r = [1,3]
+    pretrained_path = [
+        "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt"
+    ]
+    # ws_r = [1,3]
+    ws_r = [1]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "flow":flow,"use_train":use_train,"ca_fwd":ca_fwd_list,
                  "k":k, "use_chop":["false"],"ws_r":ws_r,
                  "model_type":model_type,"refine_inds":refine_inds,
-                 "aug_refine_inds":aug_refine_inds,"aug_test":aug_test}
+                 "aug_refine_inds":aug_refine_inds,"aug_test":aug_test,
+                 "pretrained_path":pretrained_path}
     exps_a = cache_io.mesh_pydicts(exp_lists) # create mesh
     cache_io.append_configs(exps_a,cfg) # merge the two
 
@@ -337,7 +351,7 @@ def main():
     cache_io.append_configs(exps_b,cfg) # merge the two
 
     # -- cat exps --
-    exps = exps_a# + exps_b
+    exps = exps_a + exps_b
     # exps = exps_b
 
     # -- run exps --

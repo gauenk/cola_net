@@ -7,6 +7,7 @@ import torch as th
 
 from .grecc_rcaa import RR as ColaNet
 from ..utils import optional as _optional
+from colanet.utils import model_io
 
 # -- auto populate fields to extract config --
 _fields = []
@@ -31,22 +32,17 @@ def load_model(cfg):
     model = ColaNet(arch_cfg,search_cfg)
 
     # -- load model --
-    load_model_weights(model,io_cfg)
+    load_pretrained(model,io_cfg)
 
     # -- device --
     model = model.to(cfg.device)
 
     return model
 
-
-def load_model_weights(model,cfg):
-    if not(cfg.pretrained_load):
-        return model
-    else:
-        print("Loading State: ",cfg.pretrained_path)
-        state = th.load(cfg.pretrained_path)#['state_dict']
-        model.load_state_dict(state)
-    return model
+def load_pretrained(model,cfg):
+    if cfg.pretrained_load:
+        print("Loading model: ",cfg.pretrained_path)
+        model_io.load_checkpoint(model,cfg.pretrained_path,cfg.pretrained_type)
 
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 #     Configs for "io"
@@ -63,7 +59,8 @@ def extract_io_config(_cfg,optional):
     base = Path("weights/checkpoints/DN_Gray/res_cola_v2_6_3_%d_l4/" % sigma)
     pretrained_path = base / "model/model_best.pt"
     pairs = {"pretrained_load":True,
-             "pretrained_path":str(pretrained_path)}
+             "pretrained_path":str(pretrained_path),
+             "pretrained_type":"lit"}
     return extract_pairs(pairs,_cfg,optional)
 
 def extract_search_config(_cfg,optional):
@@ -86,7 +83,7 @@ def extract_arch_config(_cfg,optional):
              "n_resblock":16,"n_feats":64,"n_colors":1,
              "res_scale":1,"rgb_range":1.,"stages":6,
              "blocks":3,"act":"relu","sigma":0.,
-             "arch_return_inds":False}
+             "arch_return_inds":False,"device":"cuda:0"}
     return extract_pairs(pairs,_cfg,optional)
 
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -102,7 +99,7 @@ def extract_model_config(cfg):
     for field in fields:
         if field in cfg:
             model_cfg[field] = cfg[field]
-    return model_cfg
+    return edict(model_cfg)
 
 # -- run to populate "_fields" --
 load_model(edict({"__init":True}))
