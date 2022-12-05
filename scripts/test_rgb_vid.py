@@ -98,7 +98,7 @@ def run_exp(_cfg):
         print("[%d] noisy.shape: " % index,noisy.shape)
         temporal_chop = noisy.shape[0] > 20
         temporal_chop = temporal_chop and not(use_chop)
-        noisy,clean = noisy[...,:1,:,:],clean[...,:1,:,:]
+        # noisy,clean = noisy[...,:1,:,:],clean[...,:1,:,:]
 
         # -- optional crop --
         noisy = rslice(noisy,region)
@@ -255,7 +255,8 @@ def main():
     # cfg.isize = "128_128"
     # cfg.isize = "256_256"
     # cfg.isize = "512_512"
-    cfg.isize = "none"#"128_128"
+    # cfg.isize = "none"#"128_128"
+    cfg.isize = "256_256"
     cfg.bw = False
     cfg.n_colors = 3
     cfg.nframes = 5
@@ -284,14 +285,14 @@ def main():
     sigmas = [30]
     # vid_names = ["tractor"]
     # vid_names = ["sunflower","tractor","park_joy"]
-    # vid_names = ["sunflower"]
+    vid_names = ["sunflower"]
     # vid_names = ["sunflower","hypersmooth","tractor"]
-    vid_names = ["snowboard","sunflower","tractor","motorbike",
-                 "hypersmooth","park_joy","rafting","touchdown"]
+    # vid_names = ["snowboard","sunflower","tractor","motorbike",
+    #              "hypersmooth","park_joy","rafting","touchdown"]
 
     # -- new mesh --
-    dnames = ["submillilux_real"]
-    vid_names = ["0"]
+    # dnames = ["submillilux_real"]
+    # vid_names = ["0"]
 
     # -- standard --
     # ws,wt = [27],[3]
@@ -329,7 +330,7 @@ def main():
     # aug_test = ["false"]
     refine_inds = ["f-f-f"]
     # refine_inds = ["f-f-f","t-t-t","f-f-t"]
-    aug_test = ["false","true"]
+    aug_test = ["false"]#,"true"]
     # aug_test = ["false","true"]
     aug_refine_inds = ["false"]
     # aug_refine_inds = ["true"]
@@ -345,7 +346,8 @@ def main():
     # ws_r = [1,3]
     model_type = ['augmented']
     pretrained_path = [
-        "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt"
+        "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt",
+        "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=01.ckpt",
     ]
     # ws_r = [1,3]
     ws_r = [1]
@@ -384,7 +386,7 @@ def main():
     # cache_io.append_configs(exps_b,cfg) # merge the two
 
     # -- cat exps --
-    exps = exps_a + exps_b
+    exps = exps_a# + exps_b
     # exps = exps_b
 
     # -- run exps --
@@ -428,8 +430,8 @@ def main():
     # print(records.filter(like="timer"))
 
     # -- neat report --
-    fields = ['use_train','refine_inds','use_chop','aug_test','sigma','vid_name','ws','ws_r','wt']
-    fields_summ = ['use_train','refine_inds','use_chop','aug_test','ws','ws_r','wt']
+    fields = ['pretrained_path','refine_inds','use_chop','aug_test','sigma','vid_name','ws','ws_r','wt']
+    fields_summ = ['pretrained_path','refine_inds','use_chop','aug_test','ws','ws_r','wt']
     res_fields = ['psnrs','ssims','timer_deno','mem_alloc','mem_res']
     res_fmt = ['%2.3f','%1.3f','%2.3f','%2.3f','%2.3f','%2.3f']
     # res_fields = ['psnrs','ssims','timer_deno','timer_extract',
@@ -451,9 +453,15 @@ def main():
             gfields = list(gfields)
 
             # -- header --
-            header = "-"*15 + "\n"
+            header = "-"*5 + " ("
             for i,field in enumerate(fields_summ):
-                header += "%s " % (gfields[i])
+                if field == "pretrained_path":
+                    path_str = get_pretrained_path_str(gfields[i])
+                    header += "%s, " % (path_str)
+                else:
+                    header += "%s, " % (gfields[i])
+            header = header[:-2]
+            header += ") " + "-"*5
             print(header)
 
             for vid_name,vdf in gdf.groupby("vid_name"):
@@ -468,6 +476,17 @@ def main():
                 res += res_fmt[field] % (gdf[field].mean()) + " "
             print(res)
 
+def get_pretrained_path_str(path):
+    path = str(Path(path).stem)
+    if "epoch" in path:
+        epoch = path.split("=")[1].split(".")[0]
+        uuid = path.split("-")[0][:4]
+        pstr = "%s-%s" % (uuid,epoch)
+    elif path == "none":
+        pstr = "none"
+    else:
+        pstr = path
+    return pstr
 
 if __name__ == "__main__":
     main()
