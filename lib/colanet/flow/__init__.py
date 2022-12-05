@@ -28,25 +28,29 @@ def run_zeros(vid,sigma=0.):
     flows.bflow = th.zeros((b,t,2,h,w),device=device)
     return flows
 
-def run_batch(vid,sigma):
+def run_batch(vid,sigma,rescale=True):
     B = vid.shape[0]
     flows = edict()
     flows.fflow,flows.bflow = [],[]
     for b in range(B):
-        flows_b = run(vid[b],sigma)
+        flows_b = run(vid[b],sigma,rescale)
         flows.fflow.append(flows_b.fflow)
         flows.bflow.append(flows_b.bflow)
     flows.fflow = th.stack(flows.fflow)
     flows.bflow = th.stack(flows.bflow)
     return flows
 
-def run(vid_in,sigma):
+def run(vid_in,sigma,rescale=True):
 
     # -- init --
     device = vid_in.device
     vid_in = vid_in.cpu()
     vid = vid_in.clone() # copy data for no-rounding-error from RGB <-> YUV
     t,c,h,w = vid.shape
+
+    # -- rescale --
+    if rescale:
+        vid = vid*255.
 
     # -- color2gray --
     vid = th.clamp(vid,0,255.).type(th.uint8)
