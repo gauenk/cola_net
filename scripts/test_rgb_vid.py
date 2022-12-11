@@ -365,18 +365,15 @@ def main():
     # ws_r = [1,3]
     model_type = ['augmented']
     pretrained_path = [
-<<<<<<< HEAD
         "2539a251-8233-49a8-bb4f-db68e8c96559-epoch=38-val_loss=1.15e-03.ckpt" # FT-50
         # "aa543914-3948-426b-b744-8403d46878cd-epoch=30.ckpt", # FT-30
         # "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt",
         # "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=01.ckpt",
-=======
         # "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt",
         # "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=01.ckpt",
         # "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=04.ckpt",
         "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=08.ckpt",
         # "20c5e28c-3333-484c-b982-bca1bf25eb19-epoch=03.ckpt"
->>>>>>> a3a06838f6c2418d229a77ceaab80692912c94d3
     ]
     # ws_r = [1,3]
     ws_r = [1]
@@ -437,11 +434,8 @@ def main():
         clear_exp = clear_exp or ('t' in exp.refine_inds)
         # if "submillilux" in exp.dname:
         #     cache.clear_exp(uuid)
-<<<<<<< HEAD
         # cache.clear_exp(uuid)
-=======
         cache.clear_exp(uuid)
->>>>>>> a3a06838f6c2418d229a77ceaab80692912c94d3
         # if clear_exp:
         #     cache.clear_exp(uuid)
         # if exp.use_chop == "false" and exp.ca_fwd != "dnls_k":
