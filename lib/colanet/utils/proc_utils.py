@@ -13,6 +13,22 @@ def _vprint(verbose,*args,**kwargs):
     if verbose:
         print(*args,**kwargs)
 
+def extract_proc_cfg(in_cfg):
+    def_cfg = {"spatial_crop_size":0,
+               "spatial_crop_overlap":0,
+               "temporal_crop_size":0,
+               "temporal_crop_overlap":0}
+    cfg = edict()
+    for key in def_cfg:
+        if key in in_cfg:
+            cfg[key] = in_cfg[key]
+        else:
+            cfg[key] = def_cfg[key]
+    return cfg
+
+def proc_wrapper(cfg,model):
+    model.forward = get_fwd_fxn(cfg,model.forward)
+
 def get_fwd_fxn(cfg,model):
     s_verbose = True
     t_verbose = True
@@ -26,9 +42,12 @@ def get_fwd_fxn(cfg,model):
                                                  flows=flows,verbose=s_verbose)
     else:
         schop_p = model_fwd
-    tchop_p = lambda vid,flows: temporal_chop(t_size,t_overlap,schop_p,vid,
-                                              flows=flows,verbose=t_verbose)
-    fwd_fxn = tchop_p # rename
+    if not(t_size is None) and not(t_size == "none") and not(t_size <= 0):
+        tchop_p = lambda vid,flows: temporal_chop(t_size,t_overlap,schop_p,vid,
+                                                  flows=flows,verbose=t_verbose)
+        fwd_fxn = tchop_p # rename
+    else:
+        fwd_fxn = schop_p
     return fwd_fxn
 
 def expand2square(timg,factor=16.0):

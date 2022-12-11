@@ -42,7 +42,8 @@ def load_model(cfg):
 def load_pretrained(model,cfg):
     if cfg.pretrained_load:
         print("Loading model: ",cfg.pretrained_path)
-        model_io.load_checkpoint(model,cfg.pretrained_path,cfg.pretrained_type)
+        model_io.load_checkpoint(model,cfg.pretrained_path,
+                                 cfg.pretrained_root,cfg.pretrained_type)
 
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 #     Configs for "io"
@@ -60,7 +61,8 @@ def extract_io_config(_cfg,optional):
     pretrained_path = base / "model/model_best.pt"
     pairs = {"pretrained_load":True,
              "pretrained_path":str(pretrained_path),
-             "pretrained_type":"lit"}
+             "pretrained_type":"lit",
+             "pretrained_root":"."}
     return extract_pairs(pairs,_cfg,optional)
 
 def extract_search_config(_cfg,optional):
@@ -71,7 +73,8 @@ def extract_search_config(_cfg,optional):
              "stride0":4,"stride1":1,"bs":-1,
              "rbwd":True,"nbwd":1,"exact":False,
              "reflect_bounds":False,"refine_inds":[False,False,False],
-             "dilation":1,"return_inds":True,}
+             "dilation":1,"return_inds":False,
+             "softmax_scale":10}
     return extract_pairs(pairs,_cfg,optional)
 
 def extract_arch_config(_cfg,optional):

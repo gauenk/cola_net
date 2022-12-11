@@ -28,6 +28,14 @@ def run_zeros(vid,sigma=0.):
     flows.bflow = th.zeros((b,t,2,h,w),device=device)
     return flows
 
+def orun(noisy,run_bool=True): # optional run
+    if run_bool:
+        sigma_est = est_sigma(noisy)
+        flows = run_batch(noisy[None,:],sigma_est)
+    else:
+        flows = run_zeros(noisy[None,:])
+    return flows
+
 def run_batch(vid,sigma,rescale=True):
     B = vid.shape[0]
     flows = edict()

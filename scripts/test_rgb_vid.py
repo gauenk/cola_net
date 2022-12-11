@@ -237,7 +237,7 @@ def save_path_from_cfg(cfg):
 
 def main():
 
-    # -- (0) start info --
+    # -- start info --
     verbose = True
     pid = os.getpid()
     print("PID: ",pid)
@@ -271,7 +271,7 @@ def main():
     cfg.return_inds = False
     cfg.arch_return_inds = False
     cfg.burn_in = False
-    cfg.flow = True
+    # cfg.flow = True
     cfg.pretrained_load = True
     cfg.pretrained_type = "lit"
 
@@ -280,12 +280,14 @@ def main():
     cfg.spatial_crop_overlap = 0.#0.1
     cfg.temporal_crop_size = 5#cfg.nframes
     cfg.temporal_crop_overlap = 0/5.#4/5. # 3 of 5 frames
-
+    cfg.softmax_scale = 10.
 
     # -- get mesh --
     dnames = ["set8"]
     dset = ["te"]
     sigmas = [50]
+    sigmas = [30]
+    # sigmas = [25,30]
     # vid_names = ["tractor"]
     # vid_names = ["sunflower","tractor","park_joy"]
     # vid_names = ["sunflower"]
@@ -317,8 +319,8 @@ def main():
     # cfg.k_a = 100
     cfg.k_s = 80
     cfg.k_a = 80
-    cfg.ws = 27
-    cfg.wt = 3
+    # cfg.ws = 21
+    # cfg.wt = 3
     # cfg.ws_r = '1-1-1'
     # cfg.k_a = 50
     # cfg.refine_inds = "f-f-f"
@@ -331,13 +333,18 @@ def main():
     # cfg.refine_inds = "f-f-t"
 
     # -- prop2 --
+    # ws = [27]
+    ws = [15]#,21,27]
+    wt = [0,3]
+    # wt = [3,0]
     # ws,wt = ['27-27-27'],['3-3-3']
     # cfg.k_s = '100-100-100'
     # cfg.k_a = '100-100-100'
     # cfg.refine_inds = "f-f-f"
 
-    flow = ["true"]
-    ca_fwd_list,use_train = ["dnls_k"],["false"]
+    flow = ["true"]#,"false"]
+    ca_fwd_list = ["dnls_k"]
+    use_train = ["false"]
     # refine_inds = ["f-f-f","f-f-t","f-t-f","f-t-t"]
     # aug_test = ["false"]
     refine_inds = ["f-f-f"]
@@ -358,16 +365,24 @@ def main():
     # ws_r = [1,3]
     model_type = ['augmented']
     pretrained_path = [
+<<<<<<< HEAD
         "2539a251-8233-49a8-bb4f-db68e8c96559-epoch=38-val_loss=1.15e-03.ckpt" # FT-50
         # "aa543914-3948-426b-b744-8403d46878cd-epoch=30.ckpt", # FT-30
         # "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt",
         # "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=01.ckpt",
+=======
+        # "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt",
+        # "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=01.ckpt",
+        # "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=04.ckpt",
+        "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=08.ckpt",
+        # "20c5e28c-3333-484c-b982-bca1bf25eb19-epoch=03.ckpt"
+>>>>>>> a3a06838f6c2418d229a77ceaab80692912c94d3
     ]
     # ws_r = [1,3]
     ws_r = [1]
     exp_lists = {"dname":dnames,"dset":dset,"vid_name":vid_names,"sigma":sigmas,
                  "flow":flow,"use_train":use_train,"ca_fwd":ca_fwd_list,
-                 "use_chop":["false"],"ws_r":ws_r,
+                 "use_chop":["false"],"ws_r":ws_r,"wt":wt,"ws":ws,
                  "model_type":model_type,"refine_inds":refine_inds,
                  "aug_refine_inds":aug_refine_inds,"aug_test":aug_test,
                  "pretrained_path":pretrained_path}
@@ -422,7 +437,11 @@ def main():
         clear_exp = clear_exp or ('t' in exp.refine_inds)
         # if "submillilux" in exp.dname:
         #     cache.clear_exp(uuid)
+<<<<<<< HEAD
         # cache.clear_exp(uuid)
+=======
+        cache.clear_exp(uuid)
+>>>>>>> a3a06838f6c2418d229a77ceaab80692912c94d3
         # if clear_exp:
         #     cache.clear_exp(uuid)
         # if exp.use_chop == "false" and exp.ca_fwd != "dnls_k":
