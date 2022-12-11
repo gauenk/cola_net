@@ -155,6 +155,7 @@ class ContextualAttention_Enhance(nn.Module):
 
             # -- attn mask --
             timer.sync_start("agg")
+            # print("softmax_scale: ",self.softmax_scale)
             yi = F.softmax(dists_agg*self.softmax_scale,2)
             assert_nonan(yi)
             zi = self.wpsum(b2[:,None],yi[:,None],inds_agg[:,None])

@@ -18,7 +18,6 @@ from .utils import optional
 
 def load_model(cfg):
     mtype = optional(cfg,'model_type','augmented')
-    print(mtype)
     if mtype == "augmented":
         return augmented.load_model(cfg)
     elif mtype == "refactored":

@@ -103,9 +103,9 @@ class CES(nn.Module):
         search_cfg_l = config_to_list(search_cfg)
         kwargs = {"in_channels":in_channels,
                   "out_channels":in_channels}
-        print(search_cfg_l[0])
-        print(search_cfg_l[1])
-        print(search_cfg_l[2])
+        # print(search_cfg_l[0])
+        # print(search_cfg_l[1])
+        # print(search_cfg_l[2])
         kwargs['search_cfg'] = search_cfg_l[0]
         self.c1 = merge_block(**kwargs)
         kwargs['search_cfg'] = search_cfg_l[1]
