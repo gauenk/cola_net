@@ -78,9 +78,9 @@ def run_exp(_cfg):
 
     # -- data --
     data,loaders = data_hub.sets.load(cfg)
-    groups = data.te.groups
+    groups = data[cfg.dset].groups
     # indices = [i for i,g in enumerate(groups) if cfg.vid_name in g]
-    indices = data_hub.filter_subseq(data.te,cfg.vid_name,cfg.frame_start,cfg.frame_end)
+    indices = data_hub.filter_subseq(data[cfg.dset],cfg.vid_name,cfg.frame_start,cfg.frame_end)
 
     for index in indices:
 
@@ -89,7 +89,7 @@ def run_exp(_cfg):
         print("index: ",index)
 
         # -- unpack --
-        sample = data.te[index]
+        sample = data[cfg.dset][index]
         region = sample['region']
         noisy,clean = sample['noisy'],sample['clean']
         noisy,clean = noisy.to(cfg.device),clean.to(cfg.device)
@@ -255,11 +255,13 @@ def main():
     # cfg.isize = "128_128"
     # cfg.isize = "256_256"
     # cfg.isize = "512_512"
-    # cfg.isize = "none"#"128_128"
-    cfg.isize = "256_256"
-    cfg.bw = False
-    cfg.n_colors = 3
-    cfg.nframes = 5
+    cfg.isize = "none"#"128_128"
+    # cfg.isize = "256_256"
+    cfg.bw = True
+    cfg.n_colors = 1
+    # cfg.bw = False
+    # cfg.n_colors = 3
+    cfg.nframes = 0
     cfg.frame_start = 0
     cfg.frame_end = cfg.frame_start+cfg.nframes-1
     cfg.attn_mode = "dnls_k"
@@ -282,17 +284,27 @@ def main():
 
     # -- get mesh --
     dnames = ["set8"]
-    sigmas = [30]
+    dset = ["te"]
+    sigmas = [50]
     # vid_names = ["tractor"]
     # vid_names = ["sunflower","tractor","park_joy"]
-    vid_names = ["sunflower"]
+    # vid_names = ["sunflower"]
     # vid_names = ["sunflower","hypersmooth","tractor"]
-    # vid_names = ["snowboard","sunflower","tractor","motorbike",
-    #              "hypersmooth","park_joy","rafting","touchdown"]
+    vid_names = ["snowboard","sunflower","tractor","motorbike",
+                 "hypersmooth","park_joy","rafting","touchdown"]
 
     # -- new mesh --
     # dnames = ["submillilux_real"]
     # vid_names = ["0"]
+    dnames = ["davis"]
+    dset = ["val"]
+    vid_names = ["bike-packing", "blackswan", "bmx-trees", "breakdance",
+                 "camel", "car-roundabout", "car-shadow", "cows", "dance-twirl",
+                 "dog", "dogs-jump", "drift-chicane", "drift-straight", "goat",
+                 "gold-fish", "horsejump-high", "india", "judo", "kite-surf",
+                 "lab-coat", "libby", "loading", "mbike-trick", "motocross-jump",
+                 "paragliding-launch", "parkour", "pigs", "scooter-black",
+                 "shooting", "soapbox"]
 
     # -- standard --
     # ws,wt = [27],[3]
@@ -330,7 +342,7 @@ def main():
     # aug_test = ["false"]
     refine_inds = ["f-f-f"]
     # refine_inds = ["f-f-f","t-t-t","f-f-t"]
-    aug_test = ["false"]#,"true"]
+    aug_test = ["false","true"]
     # aug_test = ["false","true"]
     aug_refine_inds = ["false"]
     # aug_refine_inds = ["true"]
@@ -346,12 +358,14 @@ def main():
     # ws_r = [1,3]
     model_type = ['augmented']
     pretrained_path = [
-        "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt",
-        "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=01.ckpt",
+        "2539a251-8233-49a8-bb4f-db68e8c96559-epoch=38-val_loss=1.15e-03.ckpt" # FT-50
+        # "aa543914-3948-426b-b744-8403d46878cd-epoch=30.ckpt", # FT-30
+        # "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt",
+        # "f542a93c-edd0-458c-8b7d-a47430b64adc-epoch=01.ckpt",
     ]
     # ws_r = [1,3]
     ws_r = [1]
-    exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
+    exp_lists = {"dname":dnames,"dset":dset,"vid_name":vid_names,"sigma":sigmas,
                  "flow":flow,"use_train":use_train,"ca_fwd":ca_fwd_list,
                  "use_chop":["false"],"ws_r":ws_r,
                  "model_type":model_type,"refine_inds":refine_inds,
@@ -406,8 +420,8 @@ def main():
         clear_exp = exp.attn_mode == "dnls_k" and exp.model_type == "refactored"
         clear_exp = clear_exp and (exp.ws != 27)
         clear_exp = clear_exp or ('t' in exp.refine_inds)
-        if "submillilux" in exp.dname:
-            cache.clear_exp(uuid)
+        # if "submillilux" in exp.dname:
+        #     cache.clear_exp(uuid)
         # cache.clear_exp(uuid)
         # if clear_exp:
         #     cache.clear_exp(uuid)
