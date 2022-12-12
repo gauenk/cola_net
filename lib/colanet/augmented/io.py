@@ -23,6 +23,7 @@ def load_model(cfg):
     optional = partial(optional_full,init)
 
     # -- unpack configs --
+    device = optional(cfg,'device','cuda:0')
     arch_cfg = extract_arch_config(cfg,optional)
     search_cfg = extract_search_config(cfg,optional)
     io_cfg = extract_io_config(cfg,optional)
@@ -35,7 +36,7 @@ def load_model(cfg):
     load_pretrained(model,io_cfg)
 
     # -- device --
-    model = model.to(cfg.device)
+    model = model.to(device)
 
     return model
 

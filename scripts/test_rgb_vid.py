@@ -20,7 +20,8 @@ import data_hub
 
 # -- optical flow --
 # import svnlb
-from colanet import flow
+# from colanet import flow
+from dev_basics import flow
 
 # -- caching results --
 import cache_io
@@ -117,11 +118,12 @@ def run_exp(_cfg):
 
         # -- optical flow --
         timer.start("flow")
-        if cfg.flow is True:
-            sigma_est = flow.est_sigma(noisy)
-            flows = flow.run_batch(noisy[None,:],sigma_est)
-        else:
-            flows = flow.run_zeros(noisy[None,:])
+        flows = flow.orun(noisy,cfg.flow)
+        # if cfg.flow is True:
+        #     sigma_est = flow.est_sigma(noisy)
+        #     flows = flow.run_batch(noisy[None,:],sigma_est)
+        # else:
+        #     flows = flow.run_zeros(noisy[None,:])
         timer.sync_stop("flow")
 
         # -- denoise --
