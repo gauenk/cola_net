@@ -189,12 +189,13 @@ def main():
     verbose = True
     cache_dir = ".cache_io"
     # cache_name = "train_rgb_net" # without "rand_bwd" option
+    # cache_name = "train_rgb_net_with_rand_bwd"  # _with_ "rand_bwd"
     cache_name = "train_rgb_net_with_rand_bwd"  # _with_ "rand_bwd"
     cache = cache_io.ExpCache(cache_dir,cache_name)
-    cache.clear()
+    # cache.clear()
 
     # -- create exp list --
-    ws,wt,k = [15],[0],[100]
+    ws,wt,k = [27],[0],[100]
     # ws,wt,k = [20],[3],[100]
     sigmas = [30.]#,30.,10.]
     flow = ['false']
@@ -241,10 +242,10 @@ def main():
     cfg.lr_init = 1e-5
     cfg.model_type = "augmented"
     cfg.accumulate_grad_batches = 1
-    cfg.limit_train_batches = .25 # current 1hr
+    cfg.limit_train_batches = .25 # current 1hr(ws=15), 2hr(ws=27)
     cfg.persistent_workers = True
     cfg.pretrained_load = False
-    cfg.pretrained_path = "81e83985-53b9-47ef-b201-1cbcd76cc20a-epoch=19.ckpt"
+    cfg.pretrained_path = "20c5e28c-3333-484c-b982-bca1bf25eb19-epoch=03.ckpt"
     cfg.pretrained_type = "lit"
     cache_io.append_configs(exps,cfg) # merge the two
 
