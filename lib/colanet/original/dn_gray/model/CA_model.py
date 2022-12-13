@@ -92,18 +92,20 @@ class ContextualAttention_Enhance(nn.Module):
 
         raw_int_bs = list(b1.size())  # b*c*h*w
 
-        patch_28, paddings_28 = extract_image_patches(b1, ksizes=[self.ksize, self.ksize],
-                                                      strides=[self.stride_1, self.stride_1],
-                                                      rates=[1, 1],
-                                                      padding='same')
+        patch_28, paddings_28 = extract_image_patches(b1,
+                                            ksizes=[self.ksize, self.ksize],
+                                            strides=[self.stride_1, self.stride_1],
+                                            rates=[1, 1],
+                                            padding='same')
         patch_28 = patch_28.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
         patch_28 = patch_28.permute(0, 4, 1, 2, 3)
         patch_28_group = torch.split(patch_28, 1, dim=0)
 
-        patch_112, paddings_112 = extract_image_patches(b2, ksizes=[self.ksize, self.ksize],
-                                                        strides=[self.stride_2, self.stride_2],
-                                                        rates=[1, 1],
-                                                        padding='same')
+        patch_112, paddings_112 = extract_image_patches(b2,
+                                                ksizes=[self.ksize, self.ksize],
+                                                strides=[self.stride_2, self.stride_2],
+                                                rates=[1, 1],
+                                                padding='same')
 
         # print(patch_112.shape)
         patch_112 = patch_112.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
@@ -147,12 +149,16 @@ class ContextualAttention_Enhance(nn.Module):
             yi = yi.view(b_s, l_s, c_s, k_s, k_s)[0]
             zi = yi.view(1, l_s, -1).permute(0, 2, 1)
             # print("raw_int_bs[2],kernel: ",raw_int_bs[2],kernel)
-            zi = torch.nn.functional.fold(zi, (raw_int_bs[2], raw_int_bs[3]), (kernel, kernel), padding=paddings[0], stride=self.stride_1)
+            zi = torch.nn.functional.fold(zi, (raw_int_bs[2], raw_int_bs[3]),
+                        (kernel, kernel), padding=paddings[0], stride=self.stride_1)
             inp = torch.ones_like(zi)
-            inp_unf = torch.nn.functional.unfold(inp, (kernel, kernel), padding=paddings[0], stride=self.stride_1)
+            inp_unf = torch.nn.functional.unfold(inp,
+                        (kernel, kernel), padding=paddings[0], stride=self.stride_1)
             # print("raw_int_bs[2],kernel,pads: ",raw_int_bs[2],kernel,paddings[0])
             # print("inp_unf.shape: ",inp_unf.shape)
-            out_mask = torch.nn.functional.fold(inp_unf, (raw_int_bs[2], raw_int_bs[3]), (kernel, kernel), padding=paddings[0], stride=self.stride_1)
+            out_mask = torch.nn.functional.fold(inp_unf,
+                        (raw_int_bs[2], raw_int_bs[3]),
+                        (kernel, kernel), padding=paddings[0], stride=self.stride_1)
             zi = zi / out_mask
             # print("zi.shape: ",zi.shape)
             y.append(zi)

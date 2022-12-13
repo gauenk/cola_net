@@ -2,6 +2,7 @@
 # -- misc --
 import dnls
 from copy import deepcopy as dcopy
+from easydict import EasyDict as edict
 from ..utils import optional
 
 # -- clean code --
@@ -22,9 +23,14 @@ def init_search(self,**kwargs):
     cfg = dcopy(kwargs)
     del cfg["attn_mode"]
     del cfg["refine_inds"]
-    if attn_mode == "dnls_k":
+    if "dnls" in attn_mode:
         if refine_inds: return self.init_refine(**cfg)
         else: return self.init_dnls_k(**cfg)
+    elif attn_mode == "csa":
+        rbounds = optional(kwargs,"reflect_bounds",False)
+        stride0 = optional(kwargs,"stride0",4)
+        dil = optional(kwargs,"dilation",1)
+        return edict({"reflect_bounds":rbounds,"stride0":stride0,"dilation":dil})
     else:
         raise ValueError(f"Uknown attn_mode [{attn_mode}]")
 
@@ -65,6 +71,26 @@ def init_dnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
                               use_adj=True,search_abs=search_abs,
                               rbwd=rbwd,nbwd=nbwd,exact=exact,
                               anchor_self=anchor_self,use_self=use_self)
+    return search
+
+@register_method
+def init_csa(self,k=100,ps=7,pt=-1,ws=-1,ws_r=-1,wt=-1,stride0=4,stride1=1,
+             dilation=1,rbwd=True,nbwd=1,exact=False,
+             reflect_bounds=False):
+    use_k = k > 0
+    search_abs = False
+    fflow,bflow = None,None
+    oh0,ow0,oh1,ow1 = 1,1,3,3
+    anchor_self = True
+    use_self = anchor_self
+    search = None#CSAWrap(oh0,oh1,ps,stride0,stride1)
+    # search = dnls.search.init("prod_with_index", fflow, bflow,
+    #                           k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
+    #                           dilation=dilation, stride0=stride0,stride1=stride1,
+    #                           reflect_bounds=reflect_bounds,use_k=use_k,
+    #                           use_adj=True,search_abs=search_abs,
+    #                           rbwd=rbwd,nbwd=nbwd,exact=exact,
+    #                           anchor_self=anchor_self,use_self=use_self)
     return search
 
 @register_method

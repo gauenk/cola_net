@@ -11,7 +11,7 @@ from easydict import EasyDict as edict
 # -- modules --
 from . import shared_mods
 from . import inds_buffer
-from ..utils.timer import ExpTimer,AggTimer
+from ..utils.timer import ExpTimer,ExpTimerList,AggTimer
 
 # -- modules --
 from colanet.utils import clean_code
@@ -41,7 +41,8 @@ class RR(nn.Module):
 
         # -- init --
         msa = CES(in_channels=n_feats,num=args.stages,
-                  return_inds=args.arch_return_inds,search_cfg=search_cfg)
+                  return_inds=args.arch_return_inds,
+                  attn_timer=args.attn_timer,search_cfg=search_cfg)
         self.msa = msa
         m_head = [conv(args.n_colors, n_feats, kernel_size)]
         m_body = []
@@ -86,8 +87,9 @@ class RR(nn.Module):
 @clean_code.add_methods_from(inds_buffer)
 class CES(nn.Module):
 
-    def __init__(self,in_channels,num=6,
-                 return_inds=False, search_cfg=None):
+    def __init__(self, in_channels, num=6,
+                 return_inds=False, attn_timer=False,
+                 search_cfg=None):
         super(CES,self).__init__()
         RBS1 = []
         for _ in range(num//2):
@@ -114,19 +116,20 @@ class CES(nn.Module):
         self.c3 = merge_block(**kwargs)
         self.return_inds = return_inds
         self.use_inds_buffer = return_inds
-        self.times = AggTimer()
+        self.use_timer = attn_timer
+        self.times = ExpTimerList(attn_timer)
 
     def reset_times(self):
         self._reset_times()
         for i in range(3):
             layer_i = getattr(self,'c%d'%(i+1))
-            layer_i.reset_times()
+            layer_i._reset_times()
 
     def update_ca_times(self):
         for i in range(3):
             layer_i = getattr(self,'c%d'%(i+1))
-            self.update_timer(layer_i.times)
-            layer_i.reset_times()
+            self.update_times(layer_i.times)
+            layer_i._reset_times()
 
     def forward(self, x, flows=None, inds=None):
         self.clear_inds_buffer()

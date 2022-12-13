@@ -75,7 +75,8 @@ def extract_search_config(_cfg,optional):
              "rbwd":True,"nbwd":1,"exact":False,
              "reflect_bounds":False,"refine_inds":[False,False,False],
              "dilation":1,"return_inds":False,
-             "softmax_scale":10}
+             "softmax_scale":10,
+             "attn_timer":False}
     return extract_pairs(pairs,_cfg,optional)
 
 def extract_arch_config(_cfg,optional):
@@ -87,7 +88,8 @@ def extract_arch_config(_cfg,optional):
              "n_resblock":16,"n_feats":64,"n_colors":1,
              "res_scale":1,"rgb_range":1.,"stages":6,
              "blocks":3,"act":"relu","sigma":0.,
-             "arch_return_inds":False,"device":"cuda:0"}
+             "arch_return_inds":False,"device":"cuda:0",
+             "attn_timer":False}
     return extract_pairs(pairs,_cfg,optional)
 
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-

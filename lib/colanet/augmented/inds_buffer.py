@@ -1,7 +1,7 @@
 
 # -- imports --
 import torch as th
-from colanet.utils import AggTimer
+from dev_basics.utils.timer import ExpTimerList
 
 # -- separate class and logic --
 from colanet.utils import clean_code
@@ -9,17 +9,18 @@ __methods__ = [] # self is a DataStore
 register_method = clean_code.register_method(__methods__)
 
 @register_method
-def update_timer(self,timer):
+def update_times(self,timer):
     # print(timer.names)
+    if not(self.use_timer): return
     for key in timer.names:
-        if not(key in self.times.names):
-            self.times[key] = [timer[key]]
-        else:
+        if key in self.times.names:
             self.times[key].append(timer[key])
+        else:
+            self.times[key] = [timer[key]]
 
 @register_method
 def _reset_times(self):
-    self.times = AggTimer()
+    self.times = ExpTimerList(self.use_timer)
 
 @register_method
 def format_inds(self,*inds_list):

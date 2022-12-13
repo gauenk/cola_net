@@ -27,7 +27,7 @@ class merge_block(nn.Module):
     def times(self):
         return self.CAUnit.times
 
-    def reset_times(self):
+    def _reset_times(self):
         self.CAUnit._reset_times()
 
     def forward(self, x, flows, inds_prev=None):
