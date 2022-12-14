@@ -81,7 +81,8 @@ def run_exp(_cfg):
     data,loaders = data_hub.sets.load(cfg)
     groups = data[cfg.dset].groups
     # indices = [i for i,g in enumerate(groups) if cfg.vid_name in g]
-    indices = data_hub.filter_subseq(data[cfg.dset],cfg.vid_name,cfg.frame_start,cfg.frame_end)
+    indices = data_hub.filter_subseq(data[cfg.dset],cfg.vid_name,
+                                     cfg.frame_start,cfg.nframes)
 
     for index in indices:
 

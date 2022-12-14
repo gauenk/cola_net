@@ -12,6 +12,7 @@ from colanet.utils import optional
 from torch.nn.functional import unfold as th_unfold
 from .tiling import *
 from dev_basics.utils.timer import ExpTimerList,ExpTimer
+import colanet.utils.gpu_mem as gpu_mem
 
 # -- clean code --
 from colanet.utils import clean_code
@@ -42,6 +43,11 @@ def forward_nl(self, vid, flows=None, inds_pred=None):
     b2 = self.theta(vid[0])[None,:]
     b3 = self.phi(vid[0])[None,:]
     timer.sync_stop("extract")
+    # print("a.")
+    # print(b1[0,0,:3,:3,:3])
+    # print(b2[0,0,:3,:3,:3])
+    # print(b3[0,0,:3,:3,:3])
+    # print("-"*30)
 
     # -- init & update --
     ifold = self.init_ifold(b1.shape,b1.device)
@@ -50,6 +56,7 @@ def forward_nl(self, vid, flows=None, inds_pred=None):
         self.search.update_flow(vid.shape,vid.device,flows)
 
     # -- batch across queries --
+    # print(nbatch,nbatches,ntotal)
     for index in range(nbatches):
 
         # -- batch info --
@@ -66,6 +73,7 @@ def forward_nl(self, vid, flows=None, inds_pred=None):
         dists,inds = self.search.wrap_fwd(b1,qindex,nbatch_i,b3,inds_pred)
         timer.sync_stop("search")
         # print("inds.shape: ",inds.shape)
+        # print(inds[0,0,:1])
         # print(dists)
 
         # -- subset to only aggregate --
@@ -123,5 +131,8 @@ def forward_nl(self, vid, flows=None, inds_pred=None):
     # print(timer)
     if timer.use_timer:
         self.update_times(timer)
+    # print("a.")
+    # print(y[0,:3,:3,:3])
+    # print("-"*20)
 
     return y,inds

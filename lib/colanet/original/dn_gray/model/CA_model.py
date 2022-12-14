@@ -85,10 +85,14 @@ class ContextualAttention_Enhance(nn.Module):
     def forward(self, b):
 
         kernel = self.ksize
-
         b1 = self.g(b)
         b2 = self.theta(b)
         b3 = self.phi(b)
+        # print("b.")
+        # print(b1[0,:3,:3,:3])
+        # print(b2[0,:3,:3,:3])
+        # print(b3[0,:3,:3,:3])
+        # print("-"*30)
 
         raw_int_bs = list(b1.size())  # b*c*h*w
 
@@ -125,6 +129,8 @@ class ContextualAttention_Enhance(nn.Module):
         f_groups = torch.split(b3, 1, dim=0)
         y = []
         for xii,xi, wi,pi in zip(f_groups,patch_112_group_2, patch_28_group, patch_112_group):
+            # print("xii.shape: ",xii.shape)
+            # print("xi.shape: ",xi.shape)
             w,h = xii.shape[2], xii.shape[3]
             _, paddings = same_padding(xii, [self.ksize, self.ksize], [1, 1], [1, 1])
             # wi = wi[0]  # [L, C, k, k]
@@ -142,7 +148,6 @@ class ContextualAttention_Enhance(nn.Module):
             # print("og: ",score_map[0,:3,:3])
             yi = F.softmax(yi*self.softmax_scale, dim=2).view(l_s, -1)
             pi = pi.view(h_s * w_s, -1)
-            # print("yi.shape: ",yi.shape)
             # yi = yi.detach()
             yi = torch.mm(yi, pi)
             # print("[post] yi.shape: ",yi.shape)
@@ -172,7 +177,9 @@ class ContextualAttention_Enhance(nn.Module):
         if self.add_SE:
             y_SE=self.SE(y)
             y=self.conv33(torch.cat((y_SE*y,y),dim=1))
+
         return y
+
     def GSmap(self,a,b):
         return torch.matmul(a,b)
 

@@ -29,17 +29,14 @@ register_method = clean_code.register_method(__methods__)
 
 @register_method
 def ca_forward(self,noisy):
-    model = self.model
-    mod = model.head(noisy)
-    nlayers = len(model.body)
-    trig_layer = nlayers - (model.n_resblocks // 2 + 2)
-    for lid,layer in enumerate(model.body):
+    mod = self.head(noisy)
+    nlayers = len(self.body)
+    trig_layer = nlayers - (self.n_resblocks // 2 + 2)
+    for lid,layer in enumerate(self.body):
         if lid == trig_layer:
-            mod = layer.c1.CAUnit(mod)
+            mod = layer.c1.CAUnit(mod,None)[0]
             break
         else:
             mod = layer(mod)
-        # mod = layer(mod)
-        # if lid == trig_layer: break
     return mod
 

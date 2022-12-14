@@ -11,7 +11,9 @@ from easydict import EasyDict as edict
 # -- modules --
 from . import shared_mods
 from . import inds_buffer
+from . import ca_forward
 from ..utils.timer import ExpTimer,ExpTimerList,AggTimer
+import colanet.utils.gpu_mem as gpu_mem
 
 # -- modules --
 from colanet.utils import clean_code
@@ -21,6 +23,7 @@ from .merge_unit import merge_block
 
 @clean_code.add_methods_from(shared_mods)
 @clean_code.add_methods_from(inds_buffer)
+@clean_code.add_methods_from(ca_forward)
 class RR(nn.Module):
 
     def __init__(self, args, search_cfg,

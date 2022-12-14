@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import colanet.utils.gpu_mem as gpu_mem
 
 # -- modules --
 from .ca_module import ContextualAttention_Enhance

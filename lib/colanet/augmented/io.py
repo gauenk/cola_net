@@ -68,7 +68,7 @@ def extract_io_config(_cfg,optional):
 
 def extract_search_config(_cfg,optional):
     pairs = {"attn_mode":"dnls_k",
-             "k_s":200,"k_a":100,
+             "k_s":30,"k_a":100,
              "ws":21,"ws_r":3,
              "ps":7,"pt":1,"wt":0,
              "stride0":4,"stride1":1,"bs":-1,

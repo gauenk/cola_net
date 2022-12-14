@@ -12,6 +12,16 @@ def load_model(name,data_sigma,version=2,**kwargs):
         return model
     elif name == "gray":
         model = load_model_gray(data_sigma,version)
+        match_api(model)
         return model
     else:
         raise ValueError(f"Uknown model name [{name}]")
+
+# match API of larger code-base
+def match_api(model):
+    fwd = model.forward
+    def wrap(vid,flows=None):
+        return fwd(vid,0)
+    model.forward = wrap
+    model.times = {}
+    model.chop = False
