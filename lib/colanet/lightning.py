@@ -106,9 +106,9 @@ class ColaNetLit(pl.LightningModule):
         return flows
 
     def configure_optimizers(self):
-        optim = th.optim.Adam(self.parameters(),lr=5e-5)
+        optim = th.optim.Adam(self.parameters(),lr=self.lr_init)
         StepLR = th.optim.lr_scheduler.StepLR
-        scheduler = StepLR(optim, step_size=5, gamma=0.1)
+        scheduler = StepLR(optim, step_size=1000, gamma=0.1)
         return [optim], [scheduler]
 
     def training_step(self, batch, batch_idx):

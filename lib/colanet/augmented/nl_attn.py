@@ -80,6 +80,7 @@ def forward_nl(self, vid, flows=None, inds_pred=None):
         inds_agg = inds[...,:self.k_a,:].contiguous()
         dists_agg = dists[...,:self.k_a].contiguous()
         # print("inds_agg.shape: ",inds_agg.shape)
+        # print("dists_agg.shape: ",dists_agg.shape)
         # print(dists_agg)
 
         # -- attn mask --

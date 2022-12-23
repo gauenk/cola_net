@@ -13,6 +13,10 @@ from .augmented import extract_model_config
 from . import aaai23
 from . import icml23
 
+# -- api for searching --
+from . import search
+from .search import get_search,extract_search_config
+
 # -- model api --
 from .utils import optional
 

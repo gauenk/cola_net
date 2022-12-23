@@ -27,6 +27,7 @@ def load_model(cfg):
     arch_cfg = extract_arch_config(cfg,optional)
     search_cfg = extract_search_config(cfg,optional)
     io_cfg = extract_io_config(cfg,optional)
+    # print(search_cfg)
     if init: return
 
     # -- init model --
