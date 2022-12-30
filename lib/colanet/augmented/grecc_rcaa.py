@@ -42,11 +42,14 @@ class RR(nn.Module):
         rgb_mean = (0.4488, 0.4371, 0.4040)
         rgb_std = (1.0, 1.0, 1.0)
 
-        # -- init --
+        # -- init attn block --
+        print(args)
         msa = CES(in_channels=n_feats,num=args.stages,
                   return_inds=args.arch_return_inds,
                   attn_timer=args.attn_timer,search_cfg=search_cfg)
         self.msa = msa
+
+        # -- create network --
         m_head = [conv(args.n_colors, n_feats, kernel_size)]
         m_body = []
         for _ in range(n_resblocks // 2):
