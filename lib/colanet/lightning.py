@@ -179,12 +179,11 @@ class ColaNetLit(pl.LightningModule):
 
         # -- report --
         self.log("val_loss", loss.item(), on_step=False,
-                 on_epoch=True,batch_size=1)
+                 on_epoch=True,batch_size=1,sync_dist=True)
         self.log("val_mem_res", mem_res, on_step=False,
-                 on_epoch=True,batch_size=1)
+                 on_epoch=True,batch_size=1,sync_dist=True)
         self.log("val_mem_alloc", mem_alloc, on_step=False,
-                 on_epoch=True,batch_size=1)
-
+                 on_epoch=True,batch_size=1,sync_dist=True)
 
         # -- terminal log --
         val_psnr = np.mean(compute_psnrs(deno,clean,div=1.)).item()
