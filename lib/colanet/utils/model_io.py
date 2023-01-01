@@ -4,6 +4,10 @@ from pathlib import Path
 def remove_lightning_load_state(state):
     names = list(state.keys())
     for name in names:
+        name_og = name.split(".")[0]
+        if name_og == "sim_model": 
+            del state[name]
+            continue
         name_new = name.split(".")[1:]
         name_new = ".".join(name_new)
         state[name_new] = state[name]
