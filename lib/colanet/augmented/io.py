@@ -73,8 +73,9 @@ def extract_search_config(_cfg,optional):
              "ws":21,"ws_r":3,
              "ps":7,"pt":1,"wt":0,
              "stride0":4,"stride1":1,"bs":-1,
-             "rbwd":True,"nbwd":1,"exact":False,
-             "reflect_bounds":False,"refine_inds":[False,False,False],
+             "rbwd":False,"nbwd":1,"exact":False,
+             "reflect_bounds":False,
+             "refine_inds":[False,False,False],
              "dilation":1,"return_inds":False,
              "softmax_scale":10,
              "attn_timer":False}

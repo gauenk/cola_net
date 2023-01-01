@@ -31,6 +31,12 @@ from colanet.utils.timer import ExpTimer
 from colanet.utils.metrics import compute_psnrs,compute_ssims
 from colanet.utils.misc import rslice,write_pickle,read_pickle
 
+# -- noise sims --
+try:
+    import stardeno
+except:
+    pass
+
 # -- generic logging --
 import logging
 logging.basicConfig()
@@ -55,7 +61,8 @@ class ColaNetLit(pl.LightningModule):
     def __init__(self,model_cfg,batch_size=1,flow=True,
                  ensemble=False,isize=None,bw=False,
                  lr_init=1e-3,weight_decay=1e-4,nepochs=0,
-                 warmup_epochs=0,task=0,uuid=""):
+                 warmup_epochs=0,task=0,uuid="",
+                 sim_type="g",sim_device="cuda:0"):
         super().__init__()
         self.lr_init = lr_init
         self._model = [colanet.load_model(model_cfg)]
@@ -67,6 +74,15 @@ class ColaNetLit(pl.LightningModule):
         self.gen_loger = logging.getLogger('lightning')
         self.gen_loger.setLevel("NOTSET")
         self.ca_fwd = "dnls_k"
+        self.sim_model = self.get_sim_model(sim_type,sim_device)
+
+    def get_sim_model(self,sim_type,sim_device):
+        if sim_type == "g":
+            return None
+        elif sim_type == "stardeno":
+            return stardeno.load_noise_sim(sim_device,True).to(sim_device)
+        else:
+            raise ValueError(f"Unknown sim model [{sim_type}]")
 
     def forward(self,vid):
         if self.ca_fwd == "dnls_k" or self.ca_fwd == "dnls":
@@ -105,6 +121,12 @@ class ColaNetLit(pl.LightningModule):
             flows.fflow,flows.bflow = zflows,zflows
         return flows
 
+    def sample_noisy(self,batch):
+        if self.sim_model is None: return
+        clean = batch['clean']
+        noisy = self.sim_model.run_rgb(clean)
+        batch['noisy'] = noisy
+
     def configure_optimizers(self):
         optim = th.optim.Adam(self.parameters(),lr=self.lr_init)
         StepLR = th.optim.lr_scheduler.StepLR
@@ -112,6 +134,9 @@ class ColaNetLit(pl.LightningModule):
         return [optim], [scheduler]
 
     def training_step(self, batch, batch_idx):
+
+        # -- sample noise from simulator --
+        self.sample_noisy(batch)
 
         # -- each sample in batch --
         loss = 0 # init @ zero
@@ -162,6 +187,9 @@ class ColaNetLit(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
 
+        # -- sample noise from simulator --
+        self.sample_noisy(batch)
+
         # -- denoise --
         noisy,clean = batch['noisy'][0]/255.,batch['clean'][0]/255.
         region = batch['region'][0]
@@ -179,18 +207,20 @@ class ColaNetLit(pl.LightningModule):
 
         # -- report --
         self.log("val_loss", loss.item(), on_step=False,
-                 on_epoch=True,batch_size=1)
+                 on_epoch=True,batch_size=1,sync_dist=True)
         self.log("val_mem_res", mem_res, on_step=False,
-                 on_epoch=True,batch_size=1)
+                 on_epoch=True,batch_size=1,sync_dist=True)
         self.log("val_mem_alloc", mem_alloc, on_step=False,
-                 on_epoch=True,batch_size=1)
-
+                 on_epoch=True,batch_size=1,sync_dist=True)
 
         # -- terminal log --
         val_psnr = np.mean(compute_psnrs(deno,clean,div=1.)).item()
         self.gen_loger.info("val_psnr: %2.2f" % val_psnr)
 
     def test_step(self, batch, batch_nb):
+
+        # -- sample noise from simulator --
+        self.sample_noisy(batch)
 
         # -- denoise --
         index,region = batch['index'][0],batch['region'][0]
