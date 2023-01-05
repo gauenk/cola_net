@@ -18,7 +18,8 @@ from easydict import EasyDict as edict
 import data_hub
 
 # -- optical flow --
-from colanet import flow
+# from colanet import flow
+from dev_basics import flow
 
 # -- caching results --
 import cache_io
@@ -59,12 +60,16 @@ class ColaNetLit(pl.LightningModule):
     #                  uuid=str(cfg.uuid))
 
     def __init__(self,model_cfg,batch_size=1,flow=True,
-                 ensemble=False,isize=None,bw=False,
-                 lr_init=1e-3,weight_decay=1e-4,nepochs=0,
-                 warmup_epochs=0,task=0,uuid="",
-                 sim_type="g",sim_device="cuda:0"):
+                 isize=None,bw=False,
+                 lr_init=1e-3,lr_final=1e-8,weight_decay=1e-4,nepochs=0,
+                 warmup_epochs=0,scheduler="default",
+                 task=0,uuid="",sim_type="g",sim_device="cuda:0"):
         super().__init__()
         self.lr_init = lr_init
+        self.lr_final = lr_final
+        self.weight_decay = weight_decay
+        self.scheduler = scheduler
+        self.nepochs = nepochs
         self._model = [colanet.load_model(model_cfg)]
         self.bw = bw
         self.net = self._model[0]#.model
@@ -94,13 +99,13 @@ class ColaNetLit(pl.LightningModule):
             raise ValueError(msg)
 
     def forward_dnls_k(self,vid):
-        flows = self._get_flow(vid)
+        flows = flow.orun(vid,self.flow)
         deno = self.net(vid,flows=flows)
         deno = th.clamp(deno,0.,1.)
         return deno
 
     def forward_default(self,vid):
-        flows = self._get_flow(vid)
+        flows = flow.orun(vid,self.flow)
         model = self._model[0]
         model.model = self.net
         if self.isize is None:
@@ -110,17 +115,6 @@ class ColaNetLit(pl.LightningModule):
         deno = th.clamp(deno,0.,1.)
         return deno
 
-    def _get_flow(self,vid):
-        if self.flow == True:
-            est_sigma = flow.est_sigma(vid)
-            flows = flow.run_batch(vid[None,:],est_sigma)
-        else:
-            t,c,h,w = vid.shape
-            zflows = th.zeros((1,t,2,h,w)).to(self.device)
-            flows = edict()
-            flows.fflow,flows.bflow = zflows,zflows
-        return flows
-
     def sample_noisy(self,batch):
         if self.sim_model is None: return
         clean = batch['clean']
@@ -128,10 +122,19 @@ class ColaNetLit(pl.LightningModule):
         batch['noisy'] = noisy
 
     def configure_optimizers(self):
-        optim = th.optim.Adam(self.parameters(),lr=self.lr_init)
-        StepLR = th.optim.lr_scheduler.StepLR
-        scheduler = StepLR(optim, step_size=1000, gamma=0.1)
-        return [optim], [scheduler]
+        optim = th.optim.Adam(self.parameters(),lr=self.lr_init,
+                              weight_decay=self.weight_decay)
+        sched = self.configure_scheduler(optim)
+        return [optim], [sched]
+
+    def configure_scheduler(self,optim):
+        if self.scheduler in ["default","exp_decay"]:
+            gamma = 1-math.exp(math.log(self.lr_final/self.lr_init)/self.nepochs)
+            ExponentialLR = th.optim.lr_scheduler.ExponentialLR
+            scheduler = ExponentialLR(optim,gamma=gamma) # (.995)^50 ~= .78
+        else:
+            raise ValueError(f"Uknown scheduler [{self.scheduler}]")
+        return scheduler
 
     def training_step(self, batch, batch_idx):
 
