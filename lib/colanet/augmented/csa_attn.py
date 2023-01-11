@@ -113,6 +113,7 @@ def forward_csa(self, vid, flows=None, inds_pred=None):
     # -- final transform --
     y = self.W(y)
     y = vid + y
+    assert_nonan(y)
 
     # -- final mods --
     if self.add_SE:
