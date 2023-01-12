@@ -123,7 +123,6 @@ def batching_info(self,vshape):
     stride0 = self.stride0
     nH,nW = (H-1)//stride0+1,(W-1)//stride0+1
     ntotal = T * nH * nW
-    print("self.bs: ",self.bs)
     if self.bs == -1 or self.bs is None:
         nmax = 5 * (540//4) * (960//4)
         nbatch = nmax if ntotal > nmax else ntotal
