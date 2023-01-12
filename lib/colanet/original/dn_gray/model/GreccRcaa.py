@@ -76,7 +76,7 @@ class RR(nn.Module):
 class CES(nn.Module):
     def __init__(self,in_channels,num=6):
         super(CES,self).__init__()
-        print('num_RB:',num)
+        # print('num_RB:',num)
         RBS1 = [
             common.ResBlock(
                 common.default_conv, n_feats=in_channels, kernel_size=3, act=nn.PReLU(), res_scale=1

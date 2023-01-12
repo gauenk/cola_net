@@ -122,13 +122,11 @@ def batching_info(self,vshape):
     B,T,C,H,W = vshape
     stride0 = self.stride0
     nH,nW = (H-1)//stride0+1,(W-1)//stride0+1
-    npix = H * W
     ntotal = T * nH * nW
-    if self.bs is None:
-        div = 2 if npix >= (540 * 960) else 1
-        nbatch = ntotal//(T*div)
-    elif self.bs == -1:
-        nbatch = ntotal
+    print("self.bs: ",self.bs)
+    if self.bs == -1 or self.bs is None:
+        nmax = 5 * (540//4) * (960//4)
+        nbatch = nmax if ntotal > nmax else ntotal
     else:
         nbatch = self.bs
     nbatches = (ntotal-1) // nbatch + 1

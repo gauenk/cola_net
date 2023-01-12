@@ -62,6 +62,7 @@ def forward_nl(self, vid, flows=None, inds_pred=None):
         # -- batch info --
         qindex = min(nbatch * index,ntotal)
         nbatch_i =  min(nbatch, ntotal - qindex)
+        # print(qindex)
 
         # -- search --
         # print("b1.shape,b3.shape: ",b1.shape,b3.shape)

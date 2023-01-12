@@ -83,7 +83,7 @@ def test_x8_2(model, L):
 class Model(nn.Module):
     def __init__(self, args, ckp):
         super(Model, self).__init__()
-        print('Making model...')
+        # print('Making model...')
 
         self.scale = args.scale
         self.idx_scale = 0
@@ -117,8 +117,8 @@ class Model(nn.Module):
             resume=args.resume,
             cpu=args.cpu
         )
-        if args.print_model:
-            print(self.model)
+        # if args.print_model:
+        #     print(self.model)
 
     def forward(self, x, idx_scale,ensemble=False):
         self.ensemble = ensemble
