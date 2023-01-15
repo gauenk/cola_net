@@ -59,8 +59,8 @@ class ColaNetLit(pl.LightningModule):
     #                  warmup_epochs=cfg.warmup_epochs,task=cfg.task,
     #                  uuid=str(cfg.uuid))
 
-    def __init__(self,model_cfg,batch_size=1,flow=True,
-                 isize=None,bw=False,
+    def __init__(self,model_cfg,batch_size=1,
+                 flow=True,flow_method=None,isize=None,bw=False,
                  lr_init=1e-3,lr_final=1e-8,weight_decay=1e-4,nepochs=0,
                  warmup_epochs=0,scheduler="default",
                  task=0,uuid="",sim_type="g",sim_device="cuda:0"):
@@ -75,6 +75,7 @@ class ColaNetLit(pl.LightningModule):
         self.net = self._model[0]#.model
         self.batch_size = batch_size
         self.flow = flow
+        self.flow_method = flow_method
         self.isize = isize
         self.gen_loger = logging.getLogger('lightning')
         self.gen_loger.setLevel("NOTSET")
@@ -99,13 +100,13 @@ class ColaNetLit(pl.LightningModule):
             raise ValueError(msg)
 
     def forward_dnls_k(self,vid):
-        flows = flow.orun(vid,self.flow)
+        flows = flow.orun(vid,self.flow,ftype=self.flow_method)
         deno = self.net(vid,flows=flows)
         deno = th.clamp(deno,0.,1.)
         return deno
 
     def forward_default(self,vid):
-        flows = flow.orun(vid,self.flow)
+        flows = flow.orun(vid,self.flow,ftype=self.flow_method)
         model = self._model[0]
         model.model = self.net
         if self.isize is None:
