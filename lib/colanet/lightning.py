@@ -53,14 +53,8 @@ from pytorch_lightning.utilities.distributed import rank_zero_only
 
 class ColaNetLit(pl.LightningModule):
 
-    # model = ModelLit(model_cfg,flow=cfg.flow,isize=cfg.isize,
-    #                  batch_size=cfg.batch_size_tr,lr_init=cfg.lr_init,
-    #                  weight_decay=cfg.weight_decay,nepochs=cfg.nepochs,
-    #                  warmup_epochs=cfg.warmup_epochs,task=cfg.task,
-    #                  uuid=str(cfg.uuid))
-
     def __init__(self,model_cfg,batch_size=1,
-                 flow=True,flow_method=None,isize=None,bw=False,
+                 flow=True,flow_method="cv2",isize=None,bw=False,
                  lr_init=1e-3,lr_final=1e-8,weight_decay=1e-4,nepochs=0,
                  warmup_epochs=0,scheduler="default",
                  task=0,uuid="",sim_type="g",sim_device="cuda:0"):
@@ -102,7 +96,7 @@ class ColaNetLit(pl.LightningModule):
     def forward_dnls_k(self,vid):
         flows = flow.orun(vid,self.flow,ftype=self.flow_method)
         deno = self.net(vid,flows=flows)
-        deno = th.clamp(deno,0.,1.)
+        # deno = th.clamp(deno,0.,1.)
         return deno
 
     def forward_default(self,vid):
@@ -113,7 +107,7 @@ class ColaNetLit(pl.LightningModule):
             deno = model.forward_chop(vid,flows=flows)
         else:
             deno = self.net(vid,flows=flows)
-        deno = th.clamp(deno,0.,1.)
+        # deno = th.clamp(deno,0.,1.)
         return deno
 
     def sample_noisy(self,batch):
@@ -180,7 +174,6 @@ class ColaNetLit(pl.LightningModule):
         # -- get data --
         noisy = rslice(noisy,region)
         clean = rslice(clean,region)
-        # print("noisy.shape: ",noisy.shape)
 
         # -- foward --
         deno = self.forward(noisy)

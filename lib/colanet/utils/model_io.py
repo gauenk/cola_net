@@ -5,7 +5,7 @@ def remove_lightning_load_state(state):
     names = list(state.keys())
     for name in names:
         name_og = name.split(".")[0]
-        if name_og == "sim_model": 
+        if name_og == "sim_model":
             del state[name]
             continue
         name_new = name.split(".")[1:]
