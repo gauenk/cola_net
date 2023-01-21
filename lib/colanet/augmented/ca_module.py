@@ -19,7 +19,7 @@ from . import inds_buffer
 from . import attn_mods
 from . import csa_attn
 from . import nl_attn
-from colanet.utils import clean_code
+from dev_basics.utils import clean_code
 
 
 """

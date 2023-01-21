@@ -43,7 +43,6 @@ class RR(nn.Module):
         rgb_std = (1.0, 1.0, 1.0)
 
         # -- init attn block --
-        print(args)
         msa = CES(in_channels=n_feats,num=args.stages,
                   return_inds=args.arch_return_inds,
                   attn_timer=args.attn_timer,search_cfg=search_cfg)

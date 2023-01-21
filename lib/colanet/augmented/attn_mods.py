@@ -6,7 +6,8 @@ from easydict import EasyDict as edict
 from ..utils import optional
 
 # -- clean code --
-from colanet.utils import clean_code
+from dev_basics.utils import clean_code
+# from colanet.utils import clean_code
 __methods__ = [] # self is a DataStore
 register_method = clean_code.register_method(__methods__)
 

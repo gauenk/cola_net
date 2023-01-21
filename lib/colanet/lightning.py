@@ -56,12 +56,15 @@ class ColaNetLit(pl.LightningModule):
     def __init__(self,model_cfg,batch_size=1,
                  flow=True,flow_method="cv2",isize=None,bw=False,
                  lr_init=1e-3,lr_final=1e-8,weight_decay=1e-4,nepochs=0,
-                 warmup_epochs=0,scheduler="default",
-                 task=0,uuid="",sim_type="g",sim_device="cuda:0"):
+                 warmup_epochs=0,scheduler="default",momentum=0.,
+                 task=0,uuid="",sim_type="g",sim_device="cuda:0",
+                 optim="default",deno_clamp=False):
         super().__init__()
+        self.optim = optim
         self.lr_init = lr_init
         self.lr_final = lr_final
         self.weight_decay = weight_decay
+        self.momentum = momentum
         self.scheduler = scheduler
         self.nepochs = nepochs
         self._model = [colanet.load_model(model_cfg)]
@@ -75,6 +78,7 @@ class ColaNetLit(pl.LightningModule):
         self.gen_loger.setLevel("NOTSET")
         self.ca_fwd = "dnls_k"
         self.sim_model = self.get_sim_model(sim_type,sim_device)
+        self.deno_clamp = deno_clamp
 
     def get_sim_model(self,sim_type,sim_device):
         if sim_type == "g":
@@ -96,7 +100,7 @@ class ColaNetLit(pl.LightningModule):
     def forward_dnls_k(self,vid):
         flows = flow.orun(vid,self.flow,ftype=self.flow_method)
         deno = self.net(vid,flows=flows)
-        # deno = th.clamp(deno,0.,1.)
+        deno = th.clamp(deno,0.,1.)
         return deno
 
     def forward_default(self,vid):
@@ -107,7 +111,8 @@ class ColaNetLit(pl.LightningModule):
             deno = model.forward_chop(vid,flows=flows)
         else:
             deno = self.net(vid,flows=flows)
-        # deno = th.clamp(deno,0.,1.)
+        if self.deno_clamp:
+            deno = th.clamp(deno,0.,1.)
         return deno
 
     def sample_noisy(self,batch):
@@ -117,8 +122,14 @@ class ColaNetLit(pl.LightningModule):
         batch['noisy'] = noisy
 
     def configure_optimizers(self):
-        optim = th.optim.Adam(self.parameters(),lr=self.lr_init,
-                              weight_decay=self.weight_decay)
+        if self.optim in ["default","adam"]:
+            optim = th.optim.Adam(self.parameters(),lr=self.lr_init,
+                                   weight_decay=self.weight_decay)
+        elif self.optim in ["adamw"]:
+            optim = th.optim.AdamW(self.parameters(),lr=self.lr_init,
+                                   weight_decay=self.weight_decay)
+        else:
+            raise ValueError("Uknown optimizer [%s]" % self.optim)
         sched = self.configure_scheduler(optim)
         return [optim], [sched]
 
@@ -127,6 +138,9 @@ class ColaNetLit(pl.LightningModule):
             gamma = 1-math.exp(math.log(self.lr_final/self.lr_init)/self.nepochs)
             ExponentialLR = th.optim.lr_scheduler.ExponentialLR
             scheduler = ExponentialLR(optim,gamma=gamma) # (.995)^50 ~= .78
+        elif self.scheduler in ["step","steplr"]:
+            StepLR = th.optim.lr_scheduler.StepLR
+            scheduler = StepLR(optim,step_size=5,gamma=0.1)
         else:
             raise ValueError(f"Uknown scheduler [{self.scheduler}]")
         return scheduler
