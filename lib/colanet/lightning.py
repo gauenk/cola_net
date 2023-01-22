@@ -141,9 +141,13 @@ class ColaNetLit(pl.LightningModule):
         elif self.scheduler in ["step","steplr"]:
             StepLR = th.optim.lr_scheduler.StepLR
             scheduler = StepLR(optim,step_size=5,gamma=0.1)
+        elif self.scheduler in ["cos"]:
+            CosAnnLR = th.optim.lr_scheduler.CosineAnnealingLR
+            T0,Tmult = 1,1
+            scheduler = CosAnnLR(optim,T0,Tmult)
         elif self.scheduler in ["none"]:
             StepLR = th.optim.lr_scheduler.StepLR
-            scheduler = StepLR(optim,step_size=10**5,gamma=1.)
+            scheduler = StepLR(optim,step_size=10**3,gamma=1.)
         else:
             raise ValueError(f"Uknown scheduler [{self.scheduler}]")
         return scheduler
