@@ -46,13 +46,13 @@ def init_refine(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,
     nheads = 1
     anchor_self = False
     use_self = anchor_self
-    search = dnls.search.init("prod_refine", k, ps, pt, ws_r, ws, nheads,
-                              chnls=-1,dilation=dilation,
-                              stride0=stride0, stride1=stride1,
-                              reflect_bounds=reflect_bounds,use_k=use_k,
-                              search_abs=search_abs,use_adj=True,
-                              anchor_self=anchor_self,use_self=use_self,
-                              exact=exact)
+    search = dnls.search_dev.init("prod_refine", k, ps, pt, ws_r, ws, nheads,
+                                  chnls=-1,dilation=dilation,
+                                  stride0=stride0, stride1=stride1,
+                                  reflect_bounds=reflect_bounds,use_k=use_k,
+                                  search_abs=search_abs,use_adj=True,
+                                  anchor_self=anchor_self,use_self=use_self,
+                                  exact=exact)
     return search
 
 @register_method
@@ -71,13 +71,13 @@ def init_dnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
     full_ws = False
     fflow,bflow = None,None
     use_self = anchor_self
-    search = dnls.search.init("prod_with_index", fflow, bflow,
-                              k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
-                              dilation=dilation, stride0=stride0,stride1=stride1,
-                              reflect_bounds=reflect_bounds,use_k=use_k,
-                              use_adj=use_adj,search_abs=search_abs,
-                              rbwd=rbwd,nbwd=nbwd,exact=exact,full_ws=full_ws,
-                              anchor_self=anchor_self,use_self=use_self)
+    search = dnls.search_dev.init("prod_with_index", fflow, bflow,
+                                  k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
+                                  dilation=dilation, stride0=stride0,stride1=stride1,
+                                  reflect_bounds=reflect_bounds,use_k=use_k,
+                                  use_adj=use_adj,search_abs=search_abs,
+                                  rbwd=rbwd,nbwd=nbwd,exact=exact,full_ws=full_ws,
+                                  anchor_self=anchor_self,use_self=use_self)
     return search
 
 @register_method
