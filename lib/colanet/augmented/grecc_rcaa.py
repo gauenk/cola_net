@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from colanet.utils.misc import rslice
 from easydict import EasyDict as edict
+from einops import rearrange,repeat
 
 # -- modules --
 from . import shared_mods
@@ -26,7 +27,7 @@ from .merge_unit import merge_block
 @clean_code.add_methods_from(ca_forward)
 class RR(nn.Module):
 
-    def __init__(self, args, search_cfg,
+    def __init__(self, args, block_cfgs,
                  conv=default_conv):
         super(RR, self).__init__()
 
@@ -36,7 +37,7 @@ class RR(nn.Module):
         kernel_size = 3
         self.return_inds = args.arch_return_inds
         self.n_resblocks = n_resblocks
-        if search_cfg is None: search_cfg = {}
+        # if block_cfgs is None: block_cfgs = {}
 
         # -- static --
         rgb_mean = (0.4488, 0.4371, 0.4040)
@@ -45,7 +46,7 @@ class RR(nn.Module):
         # -- init attn block --
         msa = CES(in_channels=n_feats,num=args.stages,
                   return_inds=args.arch_return_inds,
-                  attn_timer=args.attn_timer,search_cfg=search_cfg)
+                  attn_timer=args.attn_timer,block_cfgs=block_cfgs)
         self.msa = msa
 
         # -- create network --
@@ -78,23 +79,27 @@ class RR(nn.Module):
     def reset_times(self):
         self.msa.reset_times()
 
-    def forward(self, x, flows=None, inds=None):
-        res = x
-        res = self.head(res)
+    def forward(self, vid, flows=None, state=None):
+        B = vid.shape[0]
+        vid = rearrange(vid,'b t c h w -> (b t) c h w')
+        res = vid
+        res = self.head(vid)
         for _name,layer in self.body.named_children():
-            if int(_name) == 8: res,inds = layer(res,flows,inds)
+            if int(_name) == 8: res = layer(res,flows,state,B)
             else: res = layer(res)
         res = self.tail(res)
-        self.inds_buffer = inds
+        # self.inds_buffer = inds
         # self.update_inds_buffer(inds)
-        return x+res
+        vid = vid + res
+        vid = rearrange(vid,'(b t) c h w -> b t c h w',b=B)
+        return vid
 
 @clean_code.add_methods_from(inds_buffer)
 class CES(nn.Module):
 
     def __init__(self, in_channels, num=6,
                  return_inds=False, attn_timer=False,
-                 search_cfg=None):
+                 block_cfgs=None):
         super(CES,self).__init__()
         RBS1 = []
         for _ in range(num//2):
@@ -107,18 +112,22 @@ class CES(nn.Module):
         self.RBS1 = nn.Sequential(*RBS1)
         self.RBS2 = nn.Sequential(*RBS2)
 
-        search_cfg_l = config_to_list(search_cfg)
+        # block_cfgs_l = config_to_list(search_cfg)
         kwargs = {"in_channels":in_channels,
                   "out_channels":in_channels}
-        # print(search_cfg_l[0])
-        # print(search_cfg_l[1])
-        # print(search_cfg_l[2])
-        kwargs['search_cfg'] = search_cfg_l[0]
-        self.c1 = merge_block(**kwargs)
-        kwargs['search_cfg'] = search_cfg_l[1]
-        self.c2 = merge_block(**kwargs)
-        kwargs['search_cfg'] = search_cfg_l[2]
-        self.c3 = merge_block(**kwargs)
+        # print(block_cfgs[0])
+        # print(block_cfgs[1])
+        # print(block_cfgs[2])
+        assert len(block_cfgs) == 3
+        kwargs['search_cfg'] = block_cfgs[0]['search']
+        for i in range(3):
+            search_cfg_i = block_cfgs[i]['search']
+            setattr(self,"c%d"%(i+1),merge_block(search_cfg_i,in_channels,in_channels))
+        # self.c1 = merge_block(# **kwargs)
+        # kwargs['search_cfg'] = block_cfgs[1]['search']
+        # self.c2 = merge_block(**kwargs)
+        # kwargs['search_cfg'] = block_cfgs[2]['search']
+        # self.c3 = merge_block(**kwargs)
         self.return_inds = return_inds
         self.use_inds_buffer = return_inds
         self.use_timer = attn_timer
@@ -136,22 +145,32 @@ class CES(nn.Module):
             self.update_times(layer_i.times)
             layer_i._reset_times()
 
-    def forward(self, x, flows=None, inds=None):
+    def forward(self, vid, flows=None, inds=None, batchsize=1):
         self.clear_inds_buffer()
-        if not(inds is None):
-            inds0,inds1,inds2 = inds[0],inds[1],inds[2]
-            out,inds0 = self.c1(x,flows,inds0)
-            out = self.RBS1(out)
-            out,inds1 = self.c2(out,flows,inds1)
-            out = self.RBS2(out)
-            out,inds2 = self.c3(out,flows,inds2)
-        else:
-            out,inds0 = self.c1(x,flows,inds)
-            out = self.RBS1(out)
-            out,inds1 = self.c2(out,flows,inds0)
-            out = self.RBS2(out)
-            out,inds2 = self.c3(out,flows,inds1)
+
+        state = [inds,None]
+        out = self.c1(vid,flows,state,batchsize)
+        inds0 = state[0]
+        out = self.RBS1(out)
+        out = self.c2(out,flows,state,batchsize)
+        inds1 = state[0]
+        out = self.RBS2(out)
+        out = self.c3(out,flows,state,batchsize)
+        inds2 = state[0]
+        # if not(inds is None):
+        #     inds0,inds1,inds2 = inds[0],inds[1],inds[2]
+        #     out,inds0 = self.c1(vid,flows,inds0)
+        #     out = self.RBS1(out)
+        #     out,inds1 = self.c2(out,flows,inds1)
+        #     out = self.RBS2(out)
+        #     out,inds2 = self.c3(out,flows,inds2)
+        # else:
+        #     out,inds0 = self.c1(vid,flows,inds)
+        #     out = self.RBS1(out)
+        #     out,inds1 = self.c2(out,flows,inds0)
+        #     out = self.RBS2(out)
+        #     out,inds2 = self.c3(out,flows,inds1)
         inds = self.format_inds(inds0,inds1,inds2)
         self.update_ca_times()
-        return out,inds
+        return out#,inds
 

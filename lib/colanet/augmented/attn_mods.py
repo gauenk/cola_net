@@ -19,7 +19,7 @@ def update_search(self,inds_is_none):
 
 @register_method
 def init_search(self,**kwargs):
-    attn_mode = optional(kwargs,"attn_mode","dnls_k")
+    attn_mode = optional(kwargs,"search_name","nl")
     refine_inds = optional(kwargs,"refine_inds",False)
     cfg = dcopy(kwargs)
     del cfg["attn_mode"]
@@ -27,6 +27,12 @@ def init_search(self,**kwargs):
     if "dnls" in attn_mode:
         if refine_inds: return self.init_refine(**cfg)
         else: return self.init_dnls_k(**cfg)
+    # elif attn_mode == "nl":
+    #     return dnls.search.NonLocalSearch(cfg.ws,cfg.wt,cfg.ps,cfg.k,
+    #                                       cfg.nheads,dist_type="prod")
+    # elif attn_mode == "refine":
+    #     return dnls.search.NonLocalSearch(cfg.ws,cfg.wt,cfg.ps,cfg.k,
+    #                                       cfg.nheads,dist_type="prod")
     elif attn_mode == "csa":
         rbounds = optional(kwargs,"reflect_bounds",False)
         stride0 = optional(kwargs,"stride0",4)
@@ -36,7 +42,7 @@ def init_search(self,**kwargs):
         raise ValueError(f"Uknown attn_mode [{attn_mode}]")
 
 @register_method
-def init_refine(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,
+def init_refine(self,k=100,ps=7,pt=0,ws=21,wr=3,kr=1.,wt=0,
                 stride0=4,stride1=1,dilation=1,rbwd=True,nbwd=1,exact=False,
                 reflect_bounds=False):
     use_k = k > 0
@@ -44,16 +50,23 @@ def init_refine(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,
     fflow,bflow = None,None
     oh0,ow0,oh1,ow1 = 1,1,3,3
     nheads = 1
-    anchor_self = False
+    anchor_self = True
     use_self = anchor_self
-    search = dnls.search_dev.init("prod_refine", k, ps, pt, ws_r, ws, nheads,
-                                  chnls=-1,dilation=dilation,
-                                  stride0=stride0, stride1=stride1,
-                                  reflect_bounds=reflect_bounds,use_k=use_k,
-                                  search_abs=search_abs,use_adj=True,
-                                  anchor_self=anchor_self,use_self=use_self,
-                                  exact=exact)
-    return search
+    nheads = 1
+    return dnls.search.RefineSearch(ws,ps,k,wr,kr,nheads,
+                                    dist_type="prod",use_adj=use_adj,
+                                    anchor_self=anchor_self,
+                                    dilation=dilation,rbwd=rbwd,
+                                    nbwd=nbwd,exact=exact,
+                                    reflect_bounds=reflect_bounds)
+    # search = dnls.search_dev.init("prod_refine", k, ps, pt, ws_r, ws, nheads,
+    #                               chnls=-1,dilation=dilation,
+    #                               stride0=stride0, stride1=stride1,
+    #                               reflect_bounds=reflect_bounds,use_k=use_k,
+    #                               search_abs=search_abs,use_adj=True,
+    #                               anchor_self=anchor_self,use_self=use_self,
+    #                               exact=exact)
+    # return search
 
 @register_method
 def init_dnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
@@ -71,14 +84,21 @@ def init_dnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
     full_ws = False
     fflow,bflow = None,None
     use_self = anchor_self
-    search = dnls.search_dev.init("prod_with_index", fflow, bflow,
-                                  k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
-                                  dilation=dilation, stride0=stride0,stride1=stride1,
-                                  reflect_bounds=reflect_bounds,use_k=use_k,
-                                  use_adj=use_adj,search_abs=search_abs,
-                                  rbwd=rbwd,nbwd=nbwd,exact=exact,full_ws=full_ws,
-                                  anchor_self=anchor_self,use_self=use_self)
-    return search
+    nheads = 1
+    return dnls.search.NonLocalSearch(ws,wt,ps,k,nheads,
+                                      dist_type="prod",use_adj=use_adj,
+                                      anchor_self=anchor_self,
+                                      dilation=dilation,rbwd=rbwd,
+                                      nbwd=nbwd,exact=exact,
+                                      reflect_bounds=reflect_bounds)
+    # search = dnls.search_dev.init("prod_with_index", fflow, bflow,
+    #                               k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
+    #                               dilation=dilation, stride0=stride0,stride1=stride1,
+    #                               reflect_bounds=reflect_bounds,use_k=use_k,
+    #                               use_adj=use_adj,search_abs=search_abs,
+    #                               rbwd=rbwd,nbwd=nbwd,exact=exact,full_ws=full_ws,
+    #                               anchor_self=anchor_self,use_self=use_self)
+    # return search
 
 @register_method
 def init_csa(self,k=100,ps=7,pt=-1,ws=-1,ws_r=-1,wt=-1,stride0=4,stride1=1,
@@ -124,10 +144,11 @@ def batching_info(self,vshape):
     stride0 = self.stride0
     nH,nW = (H-1)//stride0+1,(W-1)//stride0+1
     ntotal = T * nH * nW
-    if self.bs == -1 or self.bs is None:
+    bs = self.batchsize
+    if bs == -1 or bs is None:
         nmax = 5 * (540//4) * (960//4)
         nbatch = nmax if ntotal > nmax else ntotal
     else:
-        nbatch = self.bs
+        nbatch = bs
     nbatches = (ntotal-1) // nbatch + 1
     return nbatch,nbatches,ntotal

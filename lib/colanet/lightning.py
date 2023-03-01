@@ -51,6 +51,38 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.utilities.distributed import rank_zero_only
 
 
+
+
+@econfig.set_init
+def init_cfg(cfg):
+    econfig.set_cfg(cfg)
+    cfgs = econfig({"lit":lit_pairs(),
+                    "sim":sim_pairs()})
+    return cfgs
+
+def lit_pairs():
+    pairs = {"batch_size":1,"flow":True,"flow_method":"cv2",
+             "isize":None,"bw":False,"lr_init":1e-3,
+             "lr_final":1e-8,"weight_decay":0.,
+             "nepochs":0,"task":"denoising","uuid":"",
+             "scheduler":"default","step_lr_size":5,
+             "step_lr_gamma":0.1,"flow_epoch":None,"flow_from_end":None}
+    return pairs
+
+def sim_pairs():
+    pairs = {"sim_type":"g","sim_module":"stardeno",
+             "sim_device":"cuda:0","load_fxn":"load_sim"}
+    return pairs
+
+def get_sim_model(self,cfg):
+    if cfg.sim_type == "g":
+        return None
+    elif cfg.sim_type == "stardeno":
+        module = importlib.load_module(cfg.sim_module)
+        return module.load_noise_sim(cfg.sim_device,True).to(cfg.sim_device)
+    else:
+        raise ValueError(f"Unknown sim model [{sim_type}]")
+
 class ColaNetLit(pl.LightningModule):
 
     def __init__(self,model_cfg,batch_size=1,
