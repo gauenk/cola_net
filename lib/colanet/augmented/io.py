@@ -61,6 +61,7 @@ def load_model(cfg):
 def load_pretrained(model,cfg):
     if cfg.pretrained_load:
         print("Loading model: ",cfg.pretrained_path)
+        cfg.pretrained_root = cfg.pretrained_root.replace("aaai23","icml23")
         model_io.load_checkpoint(model,cfg.pretrained_path,
                                  cfg.pretrained_root,cfg.pretrained_type)
 
@@ -96,7 +97,7 @@ def search_pairs():
         "refine_inds":[False,False,False],
         "dilation":1,"return_inds":False,
         "softmax_scale":10,
-        "attn_timer":False}
+        "attn_timer":False,"anchor_self":True}
     return pairs
     # return extract_pairs(pairs,_cfg,optional)
 

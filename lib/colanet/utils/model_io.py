@@ -16,10 +16,12 @@ def remove_lightning_load_state(state):
 def resolve_path(path,root):
     if not Path(path).exists():
         path_ = Path(root) / Path(path)
+        print(path_)
         if not(path_.exists()):
             path_ = Path(root) / "output/checkpoints/" / Path(path)
         path = path_
-    assert Path(path).exists()
+    # print(path)
+    assert Path(path).exists(),path
     return str(path)
 
 def load_checkpoint(model, path, root, wtype="git"):

@@ -14,6 +14,13 @@ from .tiling import *
 from dev_basics.utils.timer import ExpTimerList,ExpTimer
 import colanet.utils.gpu_mem as gpu_mem
 
+def print_nan_info(vid,y,Z,dists,inds,state,search_cfg):
+    print(search_cfg)
+    print("y.shape: ",y.shape)
+    print("vid.shape: ",vid.shape)
+    print("All Z > 0? ",th.all(Z>0))
+    print("Any inds < 0? ",th.any(inds < 0))
+
 # -- clean code --
 from colanet.utils import clean_code
 __methods__ = []
@@ -149,7 +156,11 @@ def forward_nl(self, vid, flows=None, state=None):
     # -- get post-attn vid --
     y,Z = ifold.vid,ifold.zvid
     y = y / Z
-    assert_nonan(y)
+    if th.any(th.isnan(y)):
+        print_nan_info(vid,y,Z,dists,inds,state,self.search_cfg)
+        print("Nan found.")
+        exit(0)
+    # assert_nonan(y)
 
     # -- remove batching --
     vid = rearrange(vid,'b t c h w -> (b t) c h w')

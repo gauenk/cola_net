@@ -80,6 +80,9 @@ class RR(nn.Module):
         self.msa.reset_times()
 
     def forward(self, vid, flows=None, state=None):
+        ndim = vid.ndim
+        if vid.ndim == 4:
+            vid = vid[None,:]
         B = vid.shape[0]
         vid = rearrange(vid,'b t c h w -> (b t) c h w')
         res = vid
@@ -92,6 +95,8 @@ class RR(nn.Module):
         # self.update_inds_buffer(inds)
         vid = vid + res
         vid = rearrange(vid,'(b t) c h w -> b t c h w',b=B)
+        if vid.ndim == 4:
+            vid = vid[0]
         return vid
 
 @clean_code.add_methods_from(inds_buffer)

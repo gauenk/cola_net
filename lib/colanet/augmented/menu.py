@@ -11,7 +11,7 @@ import copy
 dcopy = copy.deepcopy
 import numpy as np
 from easydict import EasyDict as edict
-
+from ..utils import optional
 
 def fill_menu(_cfgs,fields,menu_cfgs):
     """
@@ -43,9 +43,12 @@ def extract_menu_cfg_impl(cfg,depth):
 
     # -- unpack search name --
     # "search_vX" in ["exact","refine","approx_t","approx_s","approx_st"]
-    search_menu_name = cfg.search_menu_name
-    v0,v1 = cfg.search_v0,cfg.search_v1
-    search_names = search_menu(search_menu_name,depth,v0,v1)
+    p = edict()
+    pairs = {"search_menu_name":"full","search_v0":"exact","search_v1":"exact"}
+    for key,val in pairs.items():
+        p[key] = optional(cfg,key,val)
+    search_names = search_menu(p.search_menu_name,depth,
+                               p.search_v0,p.search_v1)
 
     # -- search params from names --
     nblocks = len(search_names)

@@ -51,8 +51,10 @@ class ContextualAttention_Enhance(nn.Module):
         self.batchsize = search_cfg.batchsize
         self.ps = search_cfg.ps
         self.inds_buffer = []
+        self.search_cfg = search_cfg
 
         self.conv33 = None
+        add_SE = True
         if add_SE:
             self.conv33=nn.Conv2d(in_channels=2*in_channels,out_channels=in_channels,
                                   kernel_size=1,stride=1,padding=0)
