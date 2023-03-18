@@ -76,8 +76,8 @@ def init_dnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
     search_abs = ws == -1
     use_adj = True
     oh0,ow0,oh1,ow1 = 1,1,3,3
-    anchor_self = True
-    # anchor_self = False
+    # anchor_self = True
+    anchor_self = False
     if search_abs:
         use_adj = True
         oh0,ow0,oh1,ow1 = 1,1,3,3
@@ -90,7 +90,8 @@ def init_dnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
                                       anchor_self=anchor_self,
                                       dilation=dilation,rbwd=rbwd,
                                       nbwd=nbwd,exact=exact,
-                                      reflect_bounds=reflect_bounds)
+                                      reflect_bounds=reflect_bounds,
+                                      oh0=oh0,ow0=ow0,oh1=oh1,ow1=ow1)
     # search = dnls.search_dev.init("prod_with_index", fflow, bflow,
     #                               k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
     #                               dilation=dilation, stride0=stride0,stride1=stride1,
@@ -123,7 +124,8 @@ def init_csa(self,k=100,ps=7,pt=-1,ws=-1,ws_r=-1,wt=-1,stride0=4,stride1=1,
 @register_method
 def init_wpsum(self,ps=7,pt=0,dilation=1,reflect_bounds=False,
                rbwd=True,nbwd=1,exact=False):
-    wpsum = dnls.reducers.WeightedPatchSumHeads(ps, pt, h_off=0, w_off=0,
+    oh0,ow0,oh1,ow1 = 1,1,3,3
+    wpsum = dnls.reducers.WeightedPatchSumHeads(ps, pt, h_off=oh0, w_off=ow1,
                                                 dilation=dilation,
                                                 reflect_bounds=reflect_bounds,
                                                 adj=0, exact=exact,

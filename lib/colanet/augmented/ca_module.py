@@ -53,11 +53,12 @@ class ContextualAttention_Enhance(nn.Module):
         self.inds_buffer = []
         self.search_cfg = search_cfg
 
-        self.conv33 = None
-        add_SE = True
-        if add_SE:
-            self.conv33=nn.Conv2d(in_channels=2*in_channels,out_channels=in_channels,
-                                  kernel_size=1,stride=1,padding=0)
+        # self.conv33 = None
+        self.conv33=nn.Conv2d(in_channels=2*in_channels,out_channels=in_channels,
+                              kernel_size=1,stride=1,padding=0)
+        # if add_SE:
+        #     self.conv33=nn.Conv2d(in_channels=2*in_channels,out_channels=in_channels,
+        #                           kernel_size=1,stride=1,padding=0)
         self.g = nn.Conv2d(in_channels=self.in_channels,
                            out_channels=self.inter_channels,
                            kernel_size=1, stride=1, padding=0)
@@ -100,6 +101,7 @@ class ContextualAttention_Enhance(nn.Module):
         self.search = None
         if search_cfg.search_name != "csa":
             self.search = dnls.search.init(search_cfg)
+        # print(self.search)
 
         # self.search = self.init_search(attn_mode=attn_mode,k=k_s,ps=ps,pt=pt,
         #                                ws=ws,ws_r=ws_r,wt=wt,
