@@ -5,7 +5,7 @@ def remove_lightning_load_state(state):
     names = list(state.keys())
     for name in names:
         name_og = name.split(".")[0]
-        if name_og == "sim_model": 
+        if name_og == "sim_model":
             del state[name]
             continue
         name_new = name.split(".")[1:]
@@ -16,10 +16,12 @@ def remove_lightning_load_state(state):
 def resolve_path(path,root):
     if not Path(path).exists():
         path_ = Path(root) / Path(path)
+        print(path_)
         if not(path_.exists()):
             path_ = Path(root) / "output/checkpoints/" / Path(path)
         path = path_
-    assert Path(path).exists()
+    # print(path)
+    assert Path(path).exists(),path
     return str(path)
 
 def load_checkpoint(model, path, root, wtype="git"):
@@ -40,6 +42,10 @@ def load_checkpoint_lit(model,path):
 def load_checkpoint_git(model,path):
     # -- filename --
     state = read_checkpoint_git(path)
+    keys = list(state.keys())
+    for key in keys:
+        if "conv33" in key:
+            del state[key]
     model.load_state_dict(state)
 
 def read_checkpoint_lit(path):

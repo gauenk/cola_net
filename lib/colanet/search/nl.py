@@ -16,14 +16,14 @@ def get_search(k,ps,ws,wt,nheads,stride0,stride1):
     rbwd,exact = False,False
     anchor_self = True
     use_self = anchor_self
-    search = dnls.search.init("prod_with_heads", fflow, bflow,
+    search = dnls.dev.search.init("prod_with_heads", fflow, bflow,
                               k, ps, pt, ws, wt, nheads, chnls=-1,
                               dilation=dil, stride0=stride0,stride1=stride1,
                               h0_off=0,w0_off=0,h1_off=0,w1_off=0,
                               reflect_bounds=reflect_bounds,use_k=use_k,
                               use_adj=True,search_abs=search_abs,
                               rbwd=rbwd,nbwd=nbwd,exact=exact,
-                              anchor_self=anchor_self,use_self=use_self)
+                              anchor_self=anchor_self)#,use_self=use_self)
     return search
 
 def init_from_cfg(cfg):
@@ -40,7 +40,7 @@ class NLSearch():
 
     def __call__(self,vid,*args):
         B,T,C,H,W = vid.shape
-        dists,inds = self.search(vid)
+        dists,inds = self.search(vid,vid)
         return dists,inds
 
     def flops(self,B,C,H,W):

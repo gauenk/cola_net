@@ -2,6 +2,17 @@
 import torch as th
 import pickle
 from easydict import EasyDict as edict
+from einops import rearrange
+
+
+def fwd_4dim(fxn,vid):
+    if vid.ndim == 4:
+        return fxn(vid)
+    B,T = vid.shape[:2]
+    vid = rearrange(vid,'b t c h w -> (b t) c h w')
+    out = fxn(vid)
+    out = rearrange(out,'(b t) c h w -> b t c h w',b=B)
+    return out
 
 def optional(pydict,key,default):
     if pydict is None: return default

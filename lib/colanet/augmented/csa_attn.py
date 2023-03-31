@@ -125,7 +125,7 @@ def forward_csa(self, vid, flows=None, inds_pred=None):
     if timer.use_timer:
         self.update_times(timer)
     inds = th.empty(0)
-    return y,inds
+    return y#,inds
 
 def same_padding(images, ksizes, strides, rates):
     assert len(images.size()) == 4

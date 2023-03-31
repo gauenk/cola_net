@@ -4,10 +4,12 @@ from . import original
 from . import refactored
 from . import batched
 from . import configs
-from . import lightning
+# from . import lightning
+from dev_basics import lightning
 from . import flow
 from . import augmented
 from .augmented import extract_model_config
+from .augmented import extract_config
 
 # -- publication api --
 from . import aaai23
