@@ -42,6 +42,10 @@ def load_checkpoint_lit(model,path):
 def load_checkpoint_git(model,path):
     # -- filename --
     state = read_checkpoint_git(path)
+    keys = list(state.keys())
+    for key in keys:
+        if "conv33" in key:
+            del state[key]
     model.load_state_dict(state)
 
 def read_checkpoint_lit(path):
