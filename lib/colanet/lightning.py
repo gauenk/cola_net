@@ -53,11 +53,6 @@ from pytorch_lightning.utilities.distributed import rank_zero_only
 
 class ColaNetLit(pl.LightningModule):
 
-    # model = ModelLit(model_cfg,flow=cfg.flow,isize=cfg.isize,
-    #                  batch_size=cfg.batch_size_tr,lr_init=cfg.lr_init,
-    #                  weight_decay=cfg.weight_decay,nepochs=cfg.nepochs,
-    #                  warmup_epochs=cfg.warmup_epochs,task=cfg.task,
-    #                  uuid=str(cfg.uuid))
 
     def __init__(self,model_cfg,batch_size=1,flow=True,
                  isize=None,bw=False,
