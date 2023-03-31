@@ -111,7 +111,7 @@ def arch_pairs():
              "res_scale":1,"rgb_range":1.,"stages":6,
              "blocks":3,"act":"relu","sigma":0.,
              "arch_return_inds":False,"device":"cuda:0",
-             "attn_timer":False}
+             "attn_timer":False,"add_SE":False}
     return pairs
     # return extract_pairs(pairs,_cfg,optional)
 

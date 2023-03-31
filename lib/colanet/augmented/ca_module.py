@@ -53,12 +53,15 @@ class ContextualAttention_Enhance(nn.Module):
         self.inds_buffer = []
         self.search_cfg = search_cfg
 
-        # self.conv33 = None
-        self.conv33=nn.Conv2d(in_channels=2*in_channels,out_channels=in_channels,
-                              kernel_size=1,stride=1,padding=0)
-        # if add_SE:
-        #     self.conv33=nn.Conv2d(in_channels=2*in_channels,out_channels=in_channels,
-        #                           kernel_size=1,stride=1,padding=0)
+        # -- se layer --
+        self.conv33 = None
+        self.SE = None
+        if self.add_SE:
+            self.SE=SE_net(in_channels=in_channels)
+            self.conv33=nn.Conv2d(in_channels=2*in_channels,out_channels=in_channels,
+                                  kernel_size=1,stride=1,padding=0)
+
+        # -- xforms; q,k,v --
         self.g = nn.Conv2d(in_channels=self.in_channels,
                            out_channels=self.inter_channels,
                            kernel_size=1, stride=1, padding=0)
@@ -132,5 +135,18 @@ class ContextualAttention_Enhance(nn.Module):
 
     def GSmap(self,a,b):
         return torch.matmul(a,b)
+
+
+class SE_net(nn.Module):
+    def __init__(self,in_channels,reduction=16):
+        super(SE_net,self).__init__()
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.fc1=nn.Conv2d(in_channels=in_channels,out_channels=in_channels//reduction,kernel_size=1,stride=1,padding=0)
+        self.fc2=nn.Conv2d(in_channels=in_channels//reduction,out_channels=in_channels,kernel_size=1,stride=1,padding=0)
+    def forward(self, x):
+        o1=self.pool(x)
+        o1=F.relu(self.fc1(o1))
+        o1=self.fc2(o1)
+        return o1
 
 

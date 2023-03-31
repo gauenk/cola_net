@@ -12,13 +12,14 @@ from .sk_conv import SKUnit
 
 class merge_block(nn.Module):
     def __init__(self,search_cfg,in_channels,out_channels,vector_length=32,
-                 use_multiple_size=False,use_topk=False):
+                 use_multiple_size=False,use_topk=False,add_SE = False):
         super(merge_block,self).__init__()
         if search_cfg is None: search_cfg = {}
         self.SKUnit = SKUnit(in_features=in_channels,
                              out_features=out_channels,M=2,G=8,r=2)
         self.CAUnit = ContextualAttention_Enhance(search_cfg,in_channels=in_channels,
-                                                  use_multiple_size=use_multiple_size)
+                                                  use_multiple_size=use_multiple_size,
+                                                  add_SE=add_SE)
         self.fc1 = nn.Linear(in_features=in_channels,out_features=vector_length)
         self.att_CA = nn.Linear(in_features=vector_length,out_features=out_channels)
         self.att_SK = nn.Linear(in_features=vector_length,out_features=out_channels)

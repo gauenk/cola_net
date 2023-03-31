@@ -46,7 +46,8 @@ class RR(nn.Module):
         # -- init attn block --
         msa = CES(in_channels=n_feats,num=args.stages,
                   return_inds=args.arch_return_inds,
-                  attn_timer=args.attn_timer,block_cfgs=block_cfgs)
+                  attn_timer=args.attn_timer,block_cfgs=block_cfgs,
+                  add_SE=args.add_SE)
         self.msa = msa
 
         # -- create network --
@@ -107,7 +108,7 @@ class CES(nn.Module):
 
     def __init__(self, in_channels, num=6,
                  return_inds=False, attn_timer=False,
-                 block_cfgs=None):
+                 block_cfgs=None, add_SE=False):
         super(CES,self).__init__()
         RBS1 = []
         for _ in range(num//2):
@@ -130,7 +131,8 @@ class CES(nn.Module):
         kwargs['search_cfg'] = block_cfgs[0]['search']
         for i in range(3):
             search_cfg_i = block_cfgs[i]['search']
-            setattr(self,"c%d"%(i+1),merge_block(search_cfg_i,in_channels,in_channels))
+            setattr(self,"c%d"%(i+1),merge_block(search_cfg_i,in_channels,in_channels,
+                                                 add_SE=add_SE))
         # self.c1 = merge_block(# **kwargs)
         # kwargs['search_cfg'] = block_cfgs[1]['search']
         # self.c2 = merge_block(**kwargs)
