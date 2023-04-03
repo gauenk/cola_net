@@ -76,8 +76,8 @@ def init_stnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
     search_abs = ws == -1
     use_adj = True
     oh0,ow0,oh1,ow1 = 1,1,3,3
-    anchor_self = True
-    # anchor_self = False
+    # anchor_self = True
+    anchor_self = False
     if search_abs:
         use_adj = True
         oh0,ow0,oh1,ow1 = 1,1,3,3
@@ -91,7 +91,8 @@ def init_stnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
                                       dilation=dilation,rbwd=rbwd,
                                       nbwd=nbwd,exact=exact,
                                       reflect_bounds=reflect_bounds)
-    # search = stnls.search_dev.init("prod_with_index", fflow, bflow,
+                                      # oh0=oh0,ow0=ow0,oh1=oh1,ow1=ow1)
+    # search = dnls.search_dev.init("prod_with_index", fflow, bflow,
     #                               k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
     #                               dilation=dilation, stride0=stride0,stride1=stride1,
     #                               reflect_bounds=reflect_bounds,use_k=use_k,
