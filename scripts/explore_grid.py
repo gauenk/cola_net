@@ -206,7 +206,7 @@ def run_exp(cfg):
 
 def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
 
-    if ca_fwd == "dnls_k":
+    if ca_fwd == "stnls_k":
         # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=99.ckpt"
         # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=81-val_loss=1.24e-03.ckpt"
         if np.abs(sigma-50.) < 1e-10:
@@ -268,7 +268,7 @@ def main():
     # ws,wt,k,sb = [10,15,20,25,30],[0,1,2,3,5],[100],[256,1024,10*1024]#1024*1]
     ws,wt,k,sb = [20],[3],[100],[256,1024,10*1024,128*128*10]#1024*1]
     flow,isizes,adapt_mtypes = ["true"],["128_128"],["rand"]
-    ca_fwd_list,use_train = ["dnls_k"],["true"]
+    ca_fwd_list,use_train = ["stnls_k"],["true"]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "internal_adapt_nsteps":internal_adapt_nsteps,
                  "internal_adapt_nepochs":internal_adapt_nepochs,
@@ -330,11 +330,11 @@ def main():
         # -- logic --
         uuid = cache.get_uuid(exp) # assing ID to each Dict in Meshgrid
         # cache.clear_exp(uuid)
-        # if exp.use_chop == "false" and exp.ca_fwd != "dnls_k":
+        # if exp.use_chop == "false" and exp.ca_fwd != "stnls_k":
         #     cache.clear_exp(uuid)
-        # if exp.ca_fwd != "dnls_k" and exp.sigma == 30.:
+        # if exp.ca_fwd != "stnls_k" and exp.sigma == 30.:
         #     cache.clear_exp(uuid)
-        # if exp.sigma == 30. and exp.ca_fwd == "dnls_k":
+        # if exp.sigma == 30. and exp.ca_fwd == "stnls_k":
         #     cache.clear_exp(uuid)
         results = cache.load_exp(exp) # possibly load result
         if results is None: # check if no result

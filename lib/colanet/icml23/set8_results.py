@@ -39,14 +39,14 @@ def detailed_cfg(cfg):
     cfg.frame_start = 0
     cfg.frame_end = cfg.frame_start+cfg.nframes-1
     # cfg.return_inds = True
-    cfg.ca_fwd = 'dnls_k'
+    cfg.ca_fwd = 'stnls_k'
 
     # -- processing --
     cfg.spatial_crop_size = "none"
     cfg.spatial_crop_overlap = 0.#0.1
     cfg.temporal_crop_size = 3#cfg.nframes
     cfg.temporal_crop_overlap = 0/5.#4/5. # 3 of 5 frames
-    cfg.attn_mode = "dnls_k"
+    cfg.attn_mode = "stnls_k"
     cfg.use_chop = "false"
 
     # -- get config --
@@ -77,7 +77,7 @@ def merge_with_base(cfg):
 
 # def load_proposed(cfg,use_train="true",flow="true"):
 #     use_chop = "false"
-#     ca_fwd = "dnls_k"
+#     ca_fwd = "stnls_k"
 #     sb = 256
 #     return load_results(ca_fwd,use_train,use_chop,flow,sb,cfg)
 
@@ -101,7 +101,7 @@ def load_results(cfg,vid_names):
     detailed_cfg(cfg)
     sb = [48*1024]
     flow,isizes,adapt_mtypes = ["true"],["none"],["rand"]
-    ca_fwd_list,use_train = ["dnls_k"],["true"]
+    ca_fwd_list,use_train = ["stnls_k"],["true"]
     refine_inds = ["f-f-f","f-f-t","f-t-f","f-t-t"]
     model_type = ['augmented']
     internal_adapt_nsteps = [300]

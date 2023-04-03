@@ -31,7 +31,7 @@ from einops import rearrange,repeat
 import data_hub
 
 # -- package imports [to test] --
-import dnls # supporting
+import stnls # supporting
 from torchvision.transforms.functional import center_crop
 
 # -- package imports [to test] --
@@ -83,7 +83,7 @@ def test_original_refactored(sigma):
     mtype = "gray"
     ensemble = False
     chop = False
-    # ca_fwd = "dnls_k"
+    # ca_fwd = "stnls_k"
     ca_fwd = "default"
 
     # -- setup cfg --
@@ -136,8 +136,8 @@ def test_original_refactored(sigma):
     # clean = th.cat([clean,clean],-1)
     # noisy = th.cat([noisy,noisy],-2)
     # clean = th.cat([clean,clean],-2)
-    dnls.testing.data.save_burst(noisy,"./output","noisy")
-    dnls.testing.data.save_burst(clean,"./output","clean")
+    stnls.testing.data.save_burst(noisy,"./output","noisy")
+    stnls.testing.data.save_burst(clean,"./output","clean")
     print("noisy.shape: ",noisy.shape)
 
     # -- compute flow --
@@ -283,8 +283,8 @@ def test_region(sigma):
     clean = clean[:t,[0],:h,:w].contiguous()/255.
     print("noisy.shape: ",noisy.shape)
     print("clean.shape: ",noisy.shape)
-    # dnls.testing.data.save_burst(noisy,"./output","noisy")
-    # dnls.testing.data.save_burst(clean,"./output","clean")
+    # stnls.testing.data.save_burst(noisy,"./output","noisy")
+    # stnls.testing.data.save_burst(clean,"./output","clean")
 
     # -- compute flow --
     flows = None

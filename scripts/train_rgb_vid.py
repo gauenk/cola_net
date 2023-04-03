@@ -200,7 +200,7 @@ def main():
     sigmas = [30.]#,30.,10.]
     flow = ['false']
     isizes = ["128_128"]
-    ca_fwd_list = ["dnls_k"]
+    ca_fwd_list = ["stnls_k"]
     rand_bwd = ["false",]#"true","false"]
     exp_lists = {"sigma":sigmas,"ws":ws,"wt":wt,"k":k,
                  "isize":isizes,"ca_fwd":ca_fwd_list,'flow':flow,
@@ -214,8 +214,8 @@ def main():
     exp_lists['rand_bwd'] = ["false"]
     exps_b = cache_io.mesh_pydicts(exp_lists) # create mesh
 
-    # -- try training "dnls_k" without flow --
-    # exp_lists['ca_fwd'] = ['dnls_k']
+    # -- try training "stnls_k" without flow --
+    # exp_lists['ca_fwd'] = ['stnls_k']
     # exp_lists['flow'] = ['false']
     # exps_c = cache_io.mesh_pydicts(exp_lists) # create mesh
 

@@ -108,7 +108,7 @@ class ColaNetLit(pl.LightningModule):
         self.isize = isize
         self.gen_loger = logging.getLogger('lightning')
         self.gen_loger.setLevel("NOTSET")
-        self.ca_fwd = "dnls_k"
+        self.ca_fwd = "stnls_k"
         self.sim_model = self.get_sim_model(sim_type,sim_device)
         self.deno_clamp = deno_clamp
 
@@ -121,15 +121,15 @@ class ColaNetLit(pl.LightningModule):
             raise ValueError(f"Unknown sim model [{sim_type}]")
 
     def forward(self,vid):
-        if self.ca_fwd == "dnls_k" or self.ca_fwd == "dnls":
-            return self.forward_dnls_k(vid)
+        if self.ca_fwd == "stnls_k" or self.ca_fwd == "stnls":
+            return self.forward_stnls_k(vid)
         elif self.ca_fwd == "default":
             return self.forward_default(vid)
         else:
             msg = f"Uknown ca forward type [{self.ca_fwd}]"
             raise ValueError(msg)
 
-    def forward_dnls_k(self,vid):
+    def forward_stnls_k(self,vid):
         flows = flow.orun(vid,self.flow,ftype=self.flow_method)
         deno = self.net(vid,flows=flows)
         deno = th.clamp(deno,0.,1.)

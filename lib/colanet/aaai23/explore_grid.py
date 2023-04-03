@@ -64,7 +64,7 @@ def load_results(cfg):
     cfg.flow = "true"
     # cfg.isize = "128_128"
     cfg.adapt_mtype = "rand"
-    cfg.ca_fwd = "dnls_k"
+    cfg.ca_fwd = "stnls_k"
     cfg.use_train = "true"
     cfg.use_chop = "false"
 

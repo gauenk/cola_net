@@ -1,4 +1,4 @@
-import dnls
+import stnls
 import torch
 import torch as th
 import torch.nn as nn
@@ -92,13 +92,13 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same', region
     stride = strides[0]
     coords = [0,0,h,w] if (region is None) else region[2:]
     adj = 0
-    unfold = dnls.iUnfold(ksize,coords,stride=stride,dilation=1,
+    unfold = stnls.iUnfold(ksize,coords,stride=stride,dilation=1,
                           adj=adj,only_full=False,border="zero")
     patches = unfold(images)
     patches_a = rearrange(patches,'(t n) 1 1 c h w -> t (c h w) n',t=t)
     patches = patches_a
 
-    # unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,
+    # unfold = stnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,
     #                               match_nn=True)#adj=ps//2,only_full=True)
     # patches = unfold(images_pad)
     # print(patches[0,0,0,0])
@@ -107,13 +107,13 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same', region
 
     # diff = th.abs(patches_a - patches_b).mean(1)
     # diff = rearrange(diff,'t (h w) -> t 1 h w',h=h//4)
-    # dnls.testing.data.save_burst(diff,'output/ca/','diff')
+    # stnls.testing.data.save_burst(diff,'output/ca/','diff')
     # error = diff.sum()
     # print("error: ",error)
     # exit(0)
 
     # print("[1] patches.shape: ",patches.shape)
-    # folder = dnls.ifold.iFold((T,C,H,W),coords,stride=stride,dilation=1,adj=True)
+    # folder = stnls.ifold.iFold((T,C,H,W),coords,stride=stride,dilation=1,adj=True)
     # unfold = torch.nn.Unfold(kernel_size=ksizes,padding=0,stride=strides)
     # patches = unfold(images)
     # print("[2] patches.shape: ",patches.shape)
@@ -149,7 +149,7 @@ class ContextualAttention_Enhance(nn.Module):
         self.phi = nn.Conv2d(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1,
                              padding=0)
 
-    def dnls_k_forward(self, b, region=None, flows=None, exact=False, ws=29, wt=0, k=100,sb=None,rand_bwd=True):
+    def stnls_k_forward(self, b, region=None, flows=None, exact=False, ws=29, wt=0, k=100,sb=None,rand_bwd=True):
 
         # -- get images --
         b1 = self.g(b)
@@ -208,26 +208,26 @@ class ContextualAttention_Enhance(nn.Module):
         oh0,ow0,oh1,ow1 = 1,1,3,3
 
         # -- define functions --
-        ifold = dnls.iFoldz((1,)+vshape,region,stride=stride0,dilation=dil,
+        ifold = stnls.iFoldz((1,)+vshape,region,stride=stride0,dilation=dil,
                             adj=0,only_full=False,use_reflect=False,
                             device=device)
-        # wfold = dnls.iFold(vshape,region,stride=stride0,dilation=dil,
+        # wfold = stnls.iFold(vshape,region,stride=stride0,dilation=dil,
         #                          adj=0,only_full=False,use_reflect=False,
         #                          device=device)
-        # scatter = dnls.scatter.ScatterNl(ps,pt,exact=exact,adj=0,reflect_bounds=False)
-        iunfold = dnls.iUnfold(ps,region,stride=stride1,dilation=dil,
+        # scatter = stnls.scatter.ScatterNl(ps,pt,exact=exact,adj=0,reflect_bounds=False)
+        iunfold = stnls.iUnfold(ps,region,stride=stride1,dilation=dil,
                                adj=0,only_full=False,border="zero")
         fflow = optional(flows,'fflow',None)#[None,:]
         bflow = optional(flows,'bflow',None)#[None,:]
 
         # print(ws,wt,k)
-        xsearch = dnls.search.init("prod_with_index", fflow, bflow,
+        xsearch = stnls.search.init("prod_with_index", fflow, bflow,
                                    k, ps, pt, ws, wt,
                                    oh0, ow0, oh1, ow1, chnls=-1,
                                    dilation=dil, stride0=stride0,stride1=stride1,
                                    reflect_bounds=False, use_k=use_k,use_adj=True,
                                    search_abs=search_abs,rbwd=rand_bwd,exact=exact)
-        wpsum = dnls.reducers.WeightedPatchSum(ps, pt, h_off=0, w_off=0,
+        wpsum = stnls.reducers.WeightedPatchSum(ps, pt, h_off=0, w_off=0,
                                                dilation=dil,
                                                reflect_bounds=reflect_bounds,
                                                adj=0, exact=exact)
@@ -272,7 +272,7 @@ class ContextualAttention_Enhance(nn.Module):
             nbatch_i =  min(nbatch, ntotal - qindex)
 
             # -- get patches --
-            # iqueries = dnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride0,
+            # iqueries = stnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride0,
             #                                             region,t,device=device)
             # th.cuda.synchronize()
 
@@ -346,7 +346,7 @@ class ContextualAttention_Enhance(nn.Module):
             #         zi.append(zi_i)
             #     zi = th.cat(zi)
             #     assert_nonan(zi)
-            # zi_dnls = zi
+            # zi_stnls = zi
             # th.cuda.synchronize()
             timer.stop("misc")
 
@@ -368,11 +368,11 @@ class ContextualAttention_Enhance(nn.Module):
             # zi = zi_check
 
             # -- testing --
-            # print(zi_dnls[:3,:3])
+            # print(zi_stnls[:3,:3])
             # print(zi_check[:3,:3])
-            # print(zi_dnls[10:12,10:12])
+            # print(zi_stnls[10:12,10:12])
             # print(zi_check[10:12,10:12])
-            # error = th.sum(th.abs(zi_check - zi_dnls)).item()
+            # error = th.sum(th.abs(zi_check - zi_stnls)).item()
             # print("Error: ",error)
             # exit(0)
 
@@ -397,15 +397,15 @@ class ContextualAttention_Enhance(nn.Module):
         # print("[final] y.shape: ",y.shape)
         assert_nonan(y)
         # y_s = y/y.max()
-        # dnls.testing.data.save_burst(y_s[:,:3],"./output/ca","y")
+        # stnls.testing.data.save_burst(y_s[:,:3],"./output/ca","y")
         # assert_nonan(Z)
         # Z_s = Z/Z.max()
-        # dnls.testing.data.save_burst(Z_s[:,:3],"./output/ca/","z")
+        # stnls.testing.data.save_burst(Z_s[:,:3],"./output/ca/","z")
 
         y = y / Z
         # assert_nonan(y)
         # yz_s = y/y.max()
-        # dnls.testing.data.save_burst(yz_s[:,:3],"./output/ca/","yz")
+        # stnls.testing.data.save_burst(yz_s[:,:3],"./output/ca/","yz")
 
         # -- final transform --
         y = self.W(y)
@@ -417,7 +417,7 @@ class ContextualAttention_Enhance(nn.Module):
 
         return y
 
-    def dnls_forward(self, b, region=None, flows=None, exact=False):
+    def stnls_forward(self, b, region=None, flows=None, exact=False):
 
         # -- get images --
         b1 = self.g(b)
@@ -454,16 +454,16 @@ class ContextualAttention_Enhance(nn.Module):
         oh0,ow0,oh1,ow1 = 1,1,3,3
 
         # -- define functions --
-        ifold = dnls.iFoldz(vshape,region,stride=stride0,dilation=dil,
+        ifold = stnls.iFoldz(vshape,region,stride=stride0,dilation=dil,
                                  adj=0,only_full=False,use_reflect=False)
-        # wfold = dnls.iFold(vshape,region,stride=stride0,dilation=dil,
+        # wfold = stnls.iFold(vshape,region,stride=stride0,dilation=dil,
         #                          adj=0,only_full=False,use_reflect=False)
-        iunfold = dnls.iUnfold(ps,region,stride=stride1,dilation=dil,
+        iunfold = stnls.iUnfold(ps,region,stride=stride1,dilation=dil,
                                adj=adj,only_full=False,border="zero")
-        # iunfold = dnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,adj=True)
+        # iunfold = stnls.iunfold.iUnfold(ps,region,stride=stride1,dilation=dil,adj=True)
         fflow = optional(flows,'fflow',None)
         bflow = optional(flows,'bflow',None)
-        xsearch = dnls.search.init("prod_with_index",fflow, bflow,
+        xsearch = stnls.search.init("prod_with_index",fflow, bflow,
                                    -1, ps, pt, ws, wt,
                                    oh0, ow0, oh1, ow1,
                                    chnls=-1,dilation=dil,stride=stride1,
@@ -501,7 +501,7 @@ class ContextualAttention_Enhance(nn.Module):
             nbatch_i =  min(nbatch, ntotal - qindex)
 
             # -- get patches --
-            # iqueries = dnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride0,
+            # iqueries = stnls.utils.inds.get_iquery_batch(qindex,nbatch_i,stride0,
             #                                             region,t,device)
             # th.cuda.synchronize()
 
@@ -611,15 +611,15 @@ class ContextualAttention_Enhance(nn.Module):
         # Z = wfold.vid
         assert_nonan(y)
         # y_s = y/y.max()
-        # dnls.testing.data.save_burst(y_s[:,:3],"./output/ca","y")
+        # stnls.testing.data.save_burst(y_s[:,:3],"./output/ca","y")
         # assert_nonan(Z)
         # Z_s = Z/Z.max()
-        # dnls.testing.data.save_burst(Z_s[:,:3],"./output/ca/","z")
+        # stnls.testing.data.save_burst(Z_s[:,:3],"./output/ca/","z")
 
         y = y / Z
         # assert_nonan(y)
         # yz_s = y/y.max()
-        # dnls.testing.data.save_burst(yz_s[:,:3],"./output/ca/","yz")
+        # stnls.testing.data.save_burst(yz_s[:,:3],"./output/ca/","yz")
 
         # -- final transform --
         y = self.W(y)
@@ -632,11 +632,11 @@ class ContextualAttention_Enhance(nn.Module):
         return y
 
         # # -- compute cross-scale search inplace --
-        # # fold,wfold = dnls.ifold.iFold(),dnls.ifold.iFold()
+        # # fold,wfold = stnls.ifold.iFold(),stnls.ifold.iFold()
         # fold,unfold = th.nn.functional.fold,th.nn.functional.unfold
-        # # unfold = dnls.iunfold.iUnfold(ksize,region,stride=stride,dilation=1,adj=True)
-        # scatter = dnls.scatter_nl(scale=1)
-        # dnls_search = dnls.xsearch.CrossScaleSearch(flows.fflow, flows.bflow, k, ps, pt,
+        # # unfold = stnls.iunfold.iUnfold(ksize,region,stride=stride,dilation=1,adj=True)
+        # scatter = stnls.scatter_nl(scale=1)
+        # stnls_search = stnls.xsearch.CrossScaleSearch(flows.fflow, flows.bflow, k, ps, pt,
         #                                             ws, wt, chnls=chnls,dilation=1, stride=1)
 
         # yi = F.softmax(dists*self.softmax_scale,1)

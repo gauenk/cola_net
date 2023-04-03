@@ -52,7 +52,7 @@ def append_detailed_cfg(cfg):
 
 def load_proposed(cfg,use_train="true",flow="true"):
     use_chop = "false"
-    ca_fwd = "dnls_k"
+    ca_fwd = "stnls_k"
     sb = 48*1024
     return load_results(ca_fwd,use_train,use_chop,flow,sb,cfg)
 

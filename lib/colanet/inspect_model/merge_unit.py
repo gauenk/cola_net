@@ -25,10 +25,10 @@ class merge_block(nn.Module):
         out1 = self.SKUnit(x)[:,None]
         if ca_forward_type in ["forward","default"]:
             out2 = self.CAUnit(x,region,flows,exact)[:,None]
-        elif ca_forward_type == "dnls":
-            out2 = self.CAUnit.dnls_forward(x,region,flows,exact)[:,None]
-        elif ca_forward_type == "dnls_k":
-            out2 = self.CAUnit.dnls_k_forward(x,region,flows,exact,
+        elif ca_forward_type == "stnls":
+            out2 = self.CAUnit.stnls_forward(x,region,flows,exact)[:,None]
+        elif ca_forward_type == "stnls_k":
+            out2 = self.CAUnit.stnls_k_forward(x,region,flows,exact,
                                               ws,wt,k,sb,rand_bwd)[:,None]
         else:
             raise ValueError(f"Uknown CrossAttn forward type [{ca_forward_type}]")

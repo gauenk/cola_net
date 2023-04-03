@@ -1,4 +1,4 @@
-import dnls
+import stnls
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -170,7 +170,7 @@ class ContextualAttention_Enhance(nn.Module):
         y = torch.cat(y, dim=0)
         # print("[final] y.shape: ",y.shape)
         # y_s = y/y.max()
-        # dnls.testing.data.save_burst(y_s[:,:3],"./output/ca","yog")
+        # stnls.testing.data.save_burst(y_s[:,:3],"./output/ca","yog")
 
         y = self.W(y)
         y = b + y

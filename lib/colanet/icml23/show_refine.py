@@ -30,10 +30,10 @@ import cache_io
 import colanet
 
 """
-{   'attn_mode': 'dnls_k',
+{   'attn_mode': 'stnls_k',
     'bs': 49152,
     'bw': True,
-    'ca_fwd': 'dnls_k',
+    'ca_fwd': 'stnls_k',
     'checkpoint_dir': '/home/gauenk/Documents/packages/colanet/output/checkpoints/',
     'device': 'cuda:0',
     'dname': 'set8',
@@ -75,14 +75,14 @@ def detailed_cfg(cfg):
     cfg.frame_start = 0
     cfg.frame_end = cfg.frame_start+cfg.nframes-1
     cfg.return_inds = True
-    cfg.ca_fwd = 'dnls_k'
+    cfg.ca_fwd = 'stnls_k'
 
     # -- processing --
     cfg.spatial_crop_size = "none"
     cfg.spatial_crop_overlap = 0.#0.1
     cfg.temporal_crop_size = 3#cfg.nframes
     cfg.temporal_crop_overlap = 0/5.#4/5. # 3 of 5 frames
-    cfg.attn_mode = "dnls_k"
+    cfg.attn_mode = "stnls_k"
     cfg.use_chop = "false"
 
     # dnames,sigmas = ["set8"],[50]#,30.]
@@ -93,7 +93,7 @@ def detailed_cfg(cfg):
     # #              "hypersmooth","park_joy","rafting","touchdown"]
     # ws,wt,k,bs = [29],[3],[100],[48*1024]
     # flow,isizes = ["true"],["none"]
-    # ca_fwd_list = ["dnls_k"]
+    # ca_fwd_list = ["stnls_k"]
     # use_train = ["true","false"]
 
     # -- append --
@@ -127,7 +127,7 @@ def merge_with_base(cfg):
 
 # def load_proposed(cfg,use_train="true",flow="true"):
 #     use_chop = "false"
-#     ca_fwd = "dnls_k"
+#     ca_fwd = "stnls_k"
 #     sb = 256
 #     return load_results(ca_fwd,use_train,use_chop,flow,sb,cfg)
 

@@ -1,6 +1,6 @@
 
 # -- imports --
-import dnls
+import stnls
 import torch
 import torch as th
 import torch.nn as nn
@@ -95,13 +95,13 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same', region
     stride = strides[0]
     coords = [0,0,h,w] if (region is None) else region[2:]
     adj = 0
-    unfold = dnls.iUnfold(ksize,coords,stride=stride,dilation=1,
+    unfold = stnls.iUnfold(ksize,coords,stride=stride,dilation=1,
                           adj=adj,only_full=False,border="zero")
     patches = unfold(images)
     patches_a = rearrange(patches,'(t n) 1 1 c h w -> t (c h w) n',t=t)
     patches = patches_a
 
-    # unfold = dnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,
+    # unfold = stnls.iunfold.iUnfold(ksize,coords,stride=stride,dilation=1,
     #                               match_nn=True)#adj=ps//2,only_full=True)
     # patches = unfold(images_pad)
     # print(patches[0,0,0,0])
@@ -110,13 +110,13 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same', region
 
     # diff = th.abs(patches_a - patches_b).mean(1)
     # diff = rearrange(diff,'t (h w) -> t 1 h w',h=h//4)
-    # dnls.testing.data.save_burst(diff,'output/ca/','diff')
+    # stnls.testing.data.save_burst(diff,'output/ca/','diff')
     # error = diff.sum()
     # print("error: ",error)
     # exit(0)
 
     # print("[1] patches.shape: ",patches.shape)
-    # folder = dnls.ifold.iFold((T,C,H,W),coords,stride=stride,dilation=1,adj=True)
+    # folder = stnls.ifold.iFold((T,C,H,W),coords,stride=stride,dilation=1,adj=True)
     # unfold = torch.nn.Unfold(kernel_size=ksizes,padding=0,stride=strides)
     # patches = unfold(images)
     # print("[2] patches.shape: ",patches.shape)

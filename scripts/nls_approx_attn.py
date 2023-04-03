@@ -206,7 +206,7 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
     if not(use_train == "true"): return
 
     # -- model path --
-    if ca_fwd == "dnls_k":
+    if ca_fwd == "stnls_k":
         if sigma == 50.:
             model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=38-val_loss=1.15e-03.ckpt"
         else:#sigma == 30:
@@ -225,7 +225,7 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
 
 def run_plot(records):
     # -- filter --
-    records = records[records['ca_fwd'] == "dnls_k"]
+    records = records[records['ca_fwd'] == "stnls_k"]
 
     # -- log --
     records = records.reset_index(drop=True)
@@ -348,7 +348,7 @@ def main():
     k = [100,500,1000,2000,4000,8000,12000,13000,14000,15000,16384]
     # k = [100,16384]
     flow,isizes,adapt_mtypes = ["false"],["128_128"],["rand"]
-    ca_fwd_list,use_train = ["dnls_k"],["false"]
+    ca_fwd_list,use_train = ["stnls_k"],["false"]
     run_ca_fwd = ["true","false"]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "internal_adapt_nsteps":internal_adapt_nsteps,

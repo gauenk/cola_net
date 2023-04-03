@@ -41,7 +41,7 @@ from colanet.utils.misc import rslice,write_pickle,read_pickle
 class WrapColaNet(th.nn.Module):
 
     def __init__(self,mtype,sigma,flow=True,ensemble=False,
-                 ca_fwd="dnls_k",isize=None,exact=False,device="cuda"):
+                 ca_fwd="stnls_k",isize=None,exact=False,device="cuda"):
         super().__init__()
         self.mtype = mtype
         self.sigma = sigma
@@ -190,7 +190,7 @@ def main():
     sigmas = [30.]
     isizes = ["96_96"]
     exact = ["false"]
-    ca_fwd_list = ["dnls_k"]
+    ca_fwd_list = ["stnls_k"]
     rep_ids = list(np.arange(3))
     seeds = list(np.arange(100))
     indices = list(np.linspace(0,30,6).astype(np.int))

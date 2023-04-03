@@ -1,5 +1,5 @@
 
-import dnls
+import stnls
 import torch
 import torch as th
 import torch.nn as nn
@@ -103,7 +103,7 @@ class ContextualAttention_Enhance(nn.Module):
         #                       "refine_inds":refine_inds}
         self.search = None
         if search_cfg.search_name != "csa":
-            self.search = dnls.search.init(search_cfg)
+            self.search = stnls.search.init(search_cfg)
 
         # self.search = self.init_search(attn_mode=attn_mode,k=k_s,ps=ps,pt=pt,
         #                                ws=ws,ws_r=ws_r,wt=wt,

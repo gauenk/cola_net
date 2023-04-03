@@ -215,7 +215,7 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
 
     # -- read cache --
     results = cache.load_exp(cfg) # possibly load result
-    if ca_fwd == "dnls_k":
+    if ca_fwd == "stnls_k":
         # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=99.ckpt"
         # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=81-val_loss=1.24e-03.ckpt"
         if np.abs(sigma-50.) < 1e-10:
@@ -256,7 +256,7 @@ def show_edge_effect(records,exps):
 
     # -- compare denos --
     def get_name(ca_group,use_chop):
-        if ca_group == "dnls_k": return "Ours"
+        if ca_group == "stnls_k": return "Ours"
         if use_chop == "true": return "Chop"
         else: return "Full"
     def read_vid(deno_fns):
@@ -342,7 +342,7 @@ def main():
     internal_adapt_nepochs = [0]
     ws,wt,k,sb = [20],[1],[100],[512*512*3]#1024*1]
     flow,isizes,adapt_mtypes = ["true"],["300_300"],["rand"]
-    ca_fwd_list,use_train = ["dnls_k"],["true"]
+    ca_fwd_list,use_train = ["stnls_k"],["true"]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "internal_adapt_nsteps":internal_adapt_nsteps,
                  "internal_adapt_nepochs":internal_adapt_nepochs,
@@ -383,11 +383,11 @@ def main():
         # cache.clear_exp(uuid)
         # if exp.use_chop == "true":
         #     cache.clear_exp(uuid)
-        # if exp.ca_fwd != "dnls_k" and exp.sigma == 30.:
+        # if exp.ca_fwd != "stnls_k" and exp.sigma == 30.:
         #     cache.clear_exp(uuid)
-        # if exp.sigma == 30. and exp.ca_fwd == "dnls_k":
+        # if exp.sigma == 30. and exp.ca_fwd == "stnls_k":
         #     cache.clear_exp(uuid)
-        # if exp.sigma == 10. and exp.ca_fwd == "dnls_k":
+        # if exp.sigma == 10. and exp.ca_fwd == "stnls_k":
         #     cache.clear_exp(uuid)
         results = cache.load_exp(exp) # possibly load result
         if results is None: # check if no result

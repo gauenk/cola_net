@@ -1,6 +1,6 @@
 
 # -- misc --
-import dnls
+import stnls
 from copy import deepcopy as dcopy
 from easydict import EasyDict as edict
 from ..utils import optional
@@ -24,14 +24,14 @@ def init_search(self,**kwargs):
     cfg = dcopy(kwargs)
     del cfg["attn_mode"]
     del cfg["refine_inds"]
-    if "dnls" in attn_mode:
+    if "stnls" in attn_mode:
         if refine_inds: return self.init_refine(**cfg)
-        else: return self.init_dnls_k(**cfg)
+        else: return self.init_stnls_k(**cfg)
     # elif attn_mode == "nl":
-    #     return dnls.search.NonLocalSearch(cfg.ws,cfg.wt,cfg.ps,cfg.k,
+    #     return stnls.search.NonLocalSearch(cfg.ws,cfg.wt,cfg.ps,cfg.k,
     #                                       cfg.nheads,dist_type="prod")
     # elif attn_mode == "refine":
-    #     return dnls.search.NonLocalSearch(cfg.ws,cfg.wt,cfg.ps,cfg.k,
+    #     return stnls.search.NonLocalSearch(cfg.ws,cfg.wt,cfg.ps,cfg.k,
     #                                       cfg.nheads,dist_type="prod")
     elif attn_mode == "csa":
         rbounds = optional(kwargs,"reflect_bounds",False)
@@ -53,13 +53,13 @@ def init_refine(self,k=100,ps=7,pt=0,ws=21,wr=3,kr=1.,wt=0,
     anchor_self = True
     use_self = anchor_self
     nheads = 1
-    return dnls.search.RefineSearch(ws,ps,k,wr,kr,nheads,
+    return stnls.search.RefineSearch(ws,ps,k,wr,kr,nheads,
                                     dist_type="prod",use_adj=use_adj,
                                     anchor_self=anchor_self,
                                     dilation=dilation,rbwd=rbwd,
                                     nbwd=nbwd,exact=exact,
                                     reflect_bounds=reflect_bounds)
-    # search = dnls.search_dev.init("prod_refine", k, ps, pt, ws_r, ws, nheads,
+    # search = stnls.search_dev.init("prod_refine", k, ps, pt, ws_r, ws, nheads,
     #                               chnls=-1,dilation=dilation,
     #                               stride0=stride0, stride1=stride1,
     #                               reflect_bounds=reflect_bounds,use_k=use_k,
@@ -69,7 +69,7 @@ def init_refine(self,k=100,ps=7,pt=0,ws=21,wr=3,kr=1.,wt=0,
     # return search
 
 @register_method
-def init_dnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
+def init_stnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
                 dilation=1,rbwd=True,nbwd=1,exact=False,
                 reflect_bounds=False):
     use_k = k > 0
@@ -85,13 +85,13 @@ def init_dnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
     fflow,bflow = None,None
     use_self = anchor_self
     nheads = 1
-    return dnls.search.NonLocalSearch(ws,wt,ps,k,nheads,
+    return stnls.search.NonLocalSearch(ws,wt,ps,k,nheads,
                                       dist_type="prod",use_adj=use_adj,
                                       anchor_self=anchor_self,
                                       dilation=dilation,rbwd=rbwd,
                                       nbwd=nbwd,exact=exact,
                                       reflect_bounds=reflect_bounds)
-    # search = dnls.search_dev.init("prod_with_index", fflow, bflow,
+    # search = stnls.search_dev.init("prod_with_index", fflow, bflow,
     #                               k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
     #                               dilation=dilation, stride0=stride0,stride1=stride1,
     #                               reflect_bounds=reflect_bounds,use_k=use_k,
@@ -111,7 +111,7 @@ def init_csa(self,k=100,ps=7,pt=-1,ws=-1,ws_r=-1,wt=-1,stride0=4,stride1=1,
     anchor_self = True
     use_self = anchor_self
     search = None#CSAWrap(oh0,oh1,ps,stride0,stride1)
-    # search = dnls.search.init("prod_with_index", fflow, bflow,
+    # search = stnls.search.init("prod_with_index", fflow, bflow,
     #                           k, ps, pt, ws, wt,oh0, ow0, oh1, ow1, chnls=-1,
     #                           dilation=dilation, stride0=stride0,stride1=stride1,
     #                           reflect_bounds=reflect_bounds,use_k=use_k,
@@ -123,7 +123,7 @@ def init_csa(self,k=100,ps=7,pt=-1,ws=-1,ws_r=-1,wt=-1,stride0=4,stride1=1,
 @register_method
 def init_wpsum(self,ps=7,pt=0,dilation=1,reflect_bounds=False,
                rbwd=True,nbwd=1,exact=False):
-    wpsum = dnls.reducers.WeightedPatchSumHeads(ps, pt, h_off=0, w_off=0,
+    wpsum = stnls.reducers.WeightedPatchSumHeads(ps, pt, h_off=0, w_off=0,
                                                 dilation=dilation,
                                                 reflect_bounds=reflect_bounds,
                                                 adj=0, exact=exact,
@@ -134,7 +134,7 @@ def init_wpsum(self,ps=7,pt=0,dilation=1,reflect_bounds=False,
 def init_ifold(self,vshape,device):
     rbounds = self.search.reflect_bounds
     stride0,dil = self.search.stride0,self.search.dilation
-    ifold = dnls.iFoldz(vshape,None,stride=stride0,dilation=dil,
+    ifold = stnls.iFoldz(vshape,None,stride=stride0,dilation=dil,
                         adj=0,only_full=False,use_reflect=rbounds,device=device)
     return ifold
 

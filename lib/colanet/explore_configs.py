@@ -28,7 +28,7 @@ def search_space_cfg():
     isize = ["128_128"]
     k = [100]
     flow,isizes,adapt_mtypes = ["true"],["128_128"],["rand"]
-    ca_fwd_list,use_train = ["dnls_k"],["true"]
+    ca_fwd_list,use_train = ["stnls_k"],["true"]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "flow":flow,"ws":ws,"wt":wt,"adapt_mtype":adapt_mtypes,
                  "isize":isizes,"use_train":use_train,"ca_fwd":ca_fwd_list,

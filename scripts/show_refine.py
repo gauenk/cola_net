@@ -219,7 +219,7 @@ def load_trained_state(model,sigma,use_train,attn_mode):
     # -- skip if needed --
     if use_train is False: return
 
-    if attn_mode == "dnls_k":
+    if attn_mode == "stnls_k":
         if np.abs(sigma-50.) < 1e-10:
             model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=38-val_loss=1.15e-03.ckpt"
         elif np.abs(sigma-30.) < 1e-10:
@@ -272,7 +272,7 @@ def main():
     cfg.spatial_crop_overlap = 0.#0.1
     cfg.temporal_crop_size = 3#cfg.nframes
     cfg.temporal_crop_overlap = 0/5.#4/5. # 3 of 5 frames
-    cfg.attn_mode = "dnls_k"
+    cfg.attn_mode = "stnls_k"
 
     # -- get mesh --
     dnames,sigmas = ["set8"],[50]#,30.]
@@ -283,7 +283,7 @@ def main():
     #              "hypersmooth","park_joy","rafting","touchdown"]
     ws,wt,k,bs = [29],[3],[100],[48*1024]
     flow,isizes = ["true"],["none"]
-    # ca_fwd_list = ["dnls_k"]
+    # ca_fwd_list = ["stnls_k"]
     use_train = ["true","false"]
     exp_lists = {"dname":dnames,"vid_name":vid_names,"sigma":sigmas,
                  "flow":flow,"ws":ws,"wt":wt,

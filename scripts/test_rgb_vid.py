@@ -207,7 +207,7 @@ def load_trained_state(model,use_train,ca_fwd,sigma,ws,wt):
 
     # -- read cache --
     results = cache.load_exp(cfg) # possibly load result
-    if ca_fwd == "dnls_k":
+    if ca_fwd == "stnls_k":
         # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=99.ckpt"
         # model_path = "output/checkpoints/2539a251-8233-49a8-bb4f-db68e8c96559-epoch=81-val_loss=1.24e-03.ckpt"
         if np.abs(sigma-50.) < 1e-10:
@@ -267,7 +267,7 @@ def main():
     cfg.nframes = 0
     cfg.frame_start = 0
     cfg.frame_end = cfg.frame_start+cfg.nframes-1
-    cfg.attn_mode = "dnls_k"
+    cfg.attn_mode = "stnls_k"
     # cfg.aug_test = True
     # cfg.aug_refine_inds = True
     # cfg.aug_refine_inds = False
@@ -346,7 +346,7 @@ def main():
     # cfg.refine_inds = "f-f-f"
 
     flow = ["true"]#,"false"]
-    ca_fwd_list = ["dnls_k"]
+    ca_fwd_list = ["stnls_k"]
     use_train = ["false"]
     # refine_inds = ["f-f-f","f-f-t","f-t-f","f-t-t"]
     # aug_test = ["false"]
@@ -432,7 +432,7 @@ def main():
         # -- logic --
         uuid = cache.get_uuid(exp) # assing ID to each Dict in Meshgrid
 
-        clear_exp = exp.attn_mode == "dnls_k" and exp.model_type == "refactored"
+        clear_exp = exp.attn_mode == "stnls_k" and exp.model_type == "refactored"
         clear_exp = clear_exp and (exp.ws != 27)
         clear_exp = clear_exp or ('t' in exp.refine_inds)
         # if "submillilux" in exp.dname:
@@ -441,13 +441,13 @@ def main():
         cache.clear_exp(uuid)
         # if clear_exp:
         #     cache.clear_exp(uuid)
-        # if exp.use_chop == "false" and exp.ca_fwd != "dnls_k":
+        # if exp.use_chop == "false" and exp.ca_fwd != "stnls_k":
         #     cache.clear_exp(uuid)
-        # if exp.ca_fwd != "dnls_k" and exp.sigma == 30.:
+        # if exp.ca_fwd != "stnls_k" and exp.sigma == 30.:
         #     cache.clear_exp(uuid)
-        # if exp.sigma == 30. and exp.ca_fwd == "dnls_k":
+        # if exp.sigma == 30. and exp.ca_fwd == "stnls_k":
         #     cache.clear_exp(uuid)
-        # if exp.sigma == 10. and exp.ca_fwd == "dnls_k":
+        # if exp.sigma == 10. and exp.ca_fwd == "stnls_k":
         #     cache.clear_exp(uuid)
         results = cache.load_exp(exp) # possibly load result
         if results is None: # check if no result
