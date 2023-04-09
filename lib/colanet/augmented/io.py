@@ -9,6 +9,7 @@ from .grecc_rcaa import RR as ColaNet
 from ..utils import optional as _optional
 
 from colanet.utils import model_io
+from dev_basics import arch_io
 from .menu import extract_menu_cfg_impl,fill_menu
 
 # -- auto populate fields to extract config --
@@ -62,8 +63,12 @@ def load_pretrained(model,cfg):
     if cfg.pretrained_load:
         print("Loading model: ",cfg.pretrained_path)
         cfg.pretrained_root = cfg.pretrained_root.replace("aaai23","icml23")
-        model_io.load_checkpoint(model,cfg.pretrained_path,
-                                 cfg.pretrained_root,cfg.pretrained_type)
+        if cfg.pretrained_type == "git":
+            model_io.load_checkpoint(model,cfg.pretrained_path,
+                                    cfg.pretrained_root,cfg.pretrained_type)
+        else:
+            arch_io.load_checkpoint(model,cfg.pretrained_path,
+                                    cfg.pretrained_root,cfg.pretrained_type)
 
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 #     Configs for "io"
@@ -149,14 +154,14 @@ def extract_menu_cfg(_cfg,depth):
 #
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-def extract_model_config(cfg):
-    # -- auto populated fields --
-    fields = _fields
-    model_cfg = {}
-    for field in fields:
-        if field in cfg:
-            model_cfg[field] = cfg[field]
-    return edict(model_cfg)
+# def extract_model_config(cfg):
+#     # -- auto populated fields --
+#     fields = _fields
+#     model_cfg = {}
+#     for field in fields:
+#         if field in cfg:
+#             model_cfg[field] = cfg[field]
+#     return edict(model_cfg)
 
 # # -- run to populate "_fields" --
 # load_model(edict({"__init":True}))

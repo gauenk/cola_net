@@ -73,4 +73,4 @@ def load_checkpoint_b2c(model,path,wtype):
     # -- read saved --
     state = read_b2c(path,wtype)
     print(list(state.keys()))
-    
+
