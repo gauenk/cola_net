@@ -101,8 +101,12 @@ class ContextualAttention_Enhance(nn.Module):
         #                       "dilation":dilation,"rbwd":rbwd,"nbwd":nbwd,
         #                       "exact":exact,"reflect_bounds":reflect_bounds,
         #                       "refine_inds":refine_inds}
+        self.k_a = search_cfg.k_a
+        self.k_s = search_cfg.k_s
         self.search = None
+        # print(search_cfg)
         if search_cfg.search_name != "csa":
+            search_cfg.k = search_cfg.k_s
             self.search = stnls.search.init(search_cfg)
 
         # self.search = self.init_search(attn_mode=attn_mode,k=k_s,ps=ps,pt=pt,

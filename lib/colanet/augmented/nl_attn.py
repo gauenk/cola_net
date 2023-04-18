@@ -107,12 +107,12 @@ def forward_nl(self, vid, flows=None, state=None):
     self.timer.sync_stop("search")
 
     # -- subset to only aggregate --
-    # if self.k_a > 0:
-    #     inds_agg = inds[...,:self.k_a,:].contiguous()
-    #     dists_agg = dists[...,:self.k_a].contiguous()
+    # print(self.k_a)
+    if self.k_a > 0 and self.k_a != self.k_s:
+        inds = inds[...,:self.k_a,:].contiguous()
+        dists = dists[...,:self.k_a].contiguous()
     inds_agg = inds.contiguous()#[...,:self.k_a,:].contiguous()
     dists_agg = dists.contiguous()#[...,:self.k_a].contiguous()
-
 
     # -- attn mask --
     self.timer.sync_start("agg")
