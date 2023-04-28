@@ -123,13 +123,28 @@ def init_csa(self,k=100,ps=7,pt=-1,ws=-1,ws_r=-1,wt=-1,stride0=4,stride1=1,
 
 @register_method
 def init_wpsum(self,ps=7,pt=0,dilation=1,reflect_bounds=False,
-               rbwd=True,nbwd=1,exact=False):
+               rbwd=True,nbwd=1,exact=False,agg_fxn="unused",stride=1):
     wpsum = stnls.reducers.WeightedPatchSumHeads(ps, pt, h_off=0, w_off=0,
                                                 dilation=dilation,
                                                 reflect_bounds=reflect_bounds,
                                                 adj=0, exact=exact,
                                                 rbwd=rbwd,nbwd=nbwd)
     return wpsum
+
+
+@register_method
+def init_pdbsum(self,ps=7,pt=0,dilation=1,reflect_bounds=False,
+                rbwd=True,nbwd=1,exact=False,agg_fxn="unused",stride0=1):
+    pdbsum = PdbAgg(-1,ps,pt,stride0,5*1024)
+    return pdbsum
+
+@register_method
+def init_agg(self,**kwargs):
+    if kwargs['agg_fxn'] == "wpsum":
+        return self.init_wpsum(**kwargs)
+    elif kwargs['agg_fxn'] == "pdb":
+        return self.init_pdbsum(**kwargs)
+    raise ValueError(f"Uknown agg_fxn {kwargs['agg_fxn']}")
 
 @register_method
 def init_ifold(self,vshape,device):

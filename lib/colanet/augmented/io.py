@@ -102,7 +102,8 @@ def search_pairs():
         "refine_inds":[False,False,False],
         "dilation":1,"return_inds":False,
         "softmax_scale":10,
-        "attn_timer":False,"anchor_self":True}
+        "attn_timer":False,"anchor_self":True,
+        "agg_fxn":"wpsum"}
     return pairs
     # return extract_pairs(pairs,_cfg,optional)
 
