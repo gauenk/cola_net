@@ -123,7 +123,7 @@ def init_csa(self,k=100,ps=7,pt=-1,ws=-1,ws_r=-1,wt=-1,stride0=4,stride1=1,
 
 @register_method
 def init_wpsum(self,ps=7,pt=0,dilation=1,reflect_bounds=False,
-               rbwd=True,nbwd=1,exact=False,agg_fxn="unused",stride=1):
+               rbwd=True,nbwd=1,exact=False,agg_fxn="unused",stride0=1):
     wpsum = stnls.reducers.WeightedPatchSumHeads(ps, pt, h_off=0, w_off=0,
                                                 dilation=dilation,
                                                 reflect_bounds=reflect_bounds,
