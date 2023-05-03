@@ -120,8 +120,8 @@ class ContextualAttention_Enhance(nn.Module):
         agg_fields = ["ps","pt","dilation","reflect_bounds",
                       "exact","agg_fxn","stride0"]
         agg_cfg = {k:search_cfg[k] for k in agg_fields}
-        # self.wpsum = self.init_wpsum(**agg_cfg)
-        self.agg = self.init_agg(**agg_cfg)
+        # self.wpsum = self.init_agg(**agg_cfg)
+        self.wpsum = self.init_agg(**agg_cfg)
 
         # -- timers --
         # self.times = AggTimer()
