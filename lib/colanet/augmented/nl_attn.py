@@ -116,8 +116,6 @@ def forward_nl(self, vid, flows=None, state=None):
 
     # -- attn mask --
     self.timer.sync_start("agg")
-    # print("softmax_scale: ",self.softmax_scale)
-    # print(dists_agg.shape)
     yi = F.softmax(dists_agg*self.softmax_scale,-1)
     assert_nonan(yi)
     zi = self.wpsum(b2,yi,inds_agg)
@@ -125,33 +123,9 @@ def forward_nl(self, vid, flows=None, state=None):
 
     # -- ifold --
     self.timer.sync_start("fold")
-    zi = rearrange(zi,'b H q c h w -> b q H 1 c h w')
+    zi = rearrange(zi,'b H q 1 c h w -> b q H 1 c h w')
     ifold(zi,0)#qindex)
     self.timer.sync_stop("fold")
-    # print(timer)
-
-    # -- update --
-    # self.update_inds_buffer(inds)
-
-    # # -- batch across queries --
-    # # print(nbatch,nbatches,ntotal)
-    # for index in range(nbatches):
-
-    #     # -- batch info --
-    #     qindex = min(nbatch * index,ntotal)
-    #     nbatch_i =  min(nbatch, ntotal - qindex)
-    #     # print(qindex)
-
-    #     # -- search --
-    #     # print("b1.shape,b3.shape: ",b1.shape,b3.shape)
-    #     # print(self.search.ws,self.search.wt,self.search.ps,
-    #     #       self.search.k,self.search.chnls,
-    #     #       self.search.stride0,self.search.stride1)
-    #     # print(self.search)
-    #     # print("inds.shape: ",inds.shape)
-    #     # print(inds[0,0,:1])
-    #     # print(dists)
-
 
     # -- get post-attn vid --
     y,Z = ifold.vid,ifold.zvid
@@ -160,7 +134,6 @@ def forward_nl(self, vid, flows=None, state=None):
         print_nan_info(vid,y,Z,dists,inds,state,self.search_cfg)
         print("Nan found.")
         exit(0)
-    # assert_nonan(y)
 
     # -- remove batching --
     vid = rearrange(vid,'b t c h w -> (b t) c h w')

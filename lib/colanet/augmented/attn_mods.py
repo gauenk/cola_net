@@ -124,6 +124,7 @@ def init_csa(self,k=100,ps=7,pt=-1,ws=-1,ws_r=-1,wt=-1,stride0=4,stride1=1,
 @register_method
 def init_wpsum(self,ps=7,pt=0,dilation=1,reflect_bounds=False,
                rbwd=True,nbwd=1,exact=False,agg_fxn="unused",stride0=1):
+
     wpsum = stnls.reducer.WeightedPatchSum(ps, pt,dilation=dilation,
                                            reflect_bounds=reflect_bounds,
                                            exact=exact,rbwd=rbwd,nbwd=nbwd,
@@ -149,8 +150,10 @@ def init_agg(self,**kwargs):
 def init_ifold(self,vshape,device):
     rbounds = self.search.reflect_bounds
     stride0,dil = self.search.stride0,self.search.dilation
-    ifold = stnls.iFoldz(vshape,None,stride=stride0,dilation=dil,
-                        adj=0,only_full=False,use_reflect=rbounds,device=device)
+    ifold = stnls.iFoldz(vshape,stride=stride0,dilation=dil,
+                         use_adj=False,only_full=False,
+                         reflect_bounds=rbounds,device=device)
+
     return ifold
 
 @register_method
