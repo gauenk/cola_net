@@ -28,7 +28,6 @@ register_method = clean_code.register_method(__methods__)
 
 @register_method
 def run_search(self,q_vid,k_vid,flows,state):
-    # bsize = 
     self.timer.sync_start("search")
     if self.search_name == "refine":
         inds_p = self.inds_rs1(state[0])
