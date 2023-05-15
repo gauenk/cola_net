@@ -53,6 +53,7 @@ def init_refine(self,k=100,ps=7,pt=0,ws=21,wr=3,kr=1.,wt=0,
     anchor_self = True
     use_self = anchor_self
     nheads = 1
+    use_adj = False
     return stnls.search.RefineSearch(ws,ps,k,wr,kr,nheads,
                                     dist_type="prod",use_adj=use_adj,
                                     anchor_self=anchor_self,
@@ -73,14 +74,15 @@ def init_stnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
                 dilation=1,rbwd=True,nbwd=1,exact=False,
                 reflect_bounds=False):
     use_k = k > 0
-    search_abs = ws == -1
-    use_adj = True
-    oh0,ow0,oh1,ow1 = 1,1,3,3
-    # anchor_self = True
-    anchor_self = False
-    if search_abs:
-        use_adj = True
-        oh0,ow0,oh1,ow1 = 1,1,3,3
+    # search_abs = ws == -1
+    # use_adj = True
+    # oh0,ow0,oh1,ow1 = 1,1,3,3
+    # # anchor_self = True
+    # anchor_self = False
+    # if search_abs:
+    #     use_adj = True
+    #     oh0,ow0,oh1,ow1 = 1,1,3,3
+    use_adj = False
     full_ws = False
     fflow,bflow = None,None
     use_self = anchor_self
