@@ -103,7 +103,7 @@ def search_pairs():
         "dilation":1,"return_inds":False,
         "softmax_scale":10,
         "attn_timer":False,"anchor_self":True,
-        "agg_fxn":"wpsum"}
+        "agg_fxn":"wpsum","dist_type":"prod"}
     return pairs
     # return extract_pairs(pairs,_cfg,optional)
 

@@ -114,6 +114,10 @@ def forward_nl(self, vid, flows=None, state=None):
     inds_agg = inds.contiguous()#[...,:self.k_a,:].contiguous()
     dists_agg = dists.contiguous()#[...,:self.k_a].contiguous()
 
+    # -- manage dists --
+    if self.dist_type == "l2":
+        dists_agg = -dists_agg
+
     # -- attn mask --
     self.timer.sync_start("agg")
     yi = F.softmax(dists_agg*self.softmax_scale,-1)
