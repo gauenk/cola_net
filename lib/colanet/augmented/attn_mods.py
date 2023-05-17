@@ -82,6 +82,7 @@ def init_stnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
     # if search_abs:
     #     use_adj = True
     #     oh0,ow0,oh1,ow1 = 1,1,3,3
+    # use_adj = True # for testing only
     use_adj = False
     full_ws = False
     fflow,bflow = None,None
