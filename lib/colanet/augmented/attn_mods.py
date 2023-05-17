@@ -44,7 +44,7 @@ def init_search(self,**kwargs):
 @register_method
 def init_refine(self,k=100,ps=7,pt=0,ws=21,wr=3,kr=1.,wt=0,
                 stride0=4,stride1=1,dilation=1,rbwd=True,nbwd=1,exact=False,
-                reflect_bounds=False):
+                dist_type="prod",reflect_bounds=False):
     use_k = k > 0
     search_abs = False
     fflow,bflow = None,None
@@ -55,7 +55,7 @@ def init_refine(self,k=100,ps=7,pt=0,ws=21,wr=3,kr=1.,wt=0,
     nheads = 1
     use_adj = False
     return stnls.search.RefineSearch(ws,ps,k,wr,kr,nheads,
-                                    dist_type="prod",use_adj=use_adj,
+                                    dist_type=dist_type,use_adj=use_adj,
                                     anchor_self=anchor_self,
                                     dilation=dilation,rbwd=rbwd,
                                     nbwd=nbwd,exact=exact,
@@ -71,8 +71,8 @@ def init_refine(self,k=100,ps=7,pt=0,ws=21,wr=3,kr=1.,wt=0,
 
 @register_method
 def init_stnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
-                dilation=1,rbwd=True,nbwd=1,exact=False,
-                reflect_bounds=False):
+                 dist_type="prod",dilation=1,rbwd=True,nbwd=1,exact=False,
+                 reflect_bounds=False):
     use_k = k > 0
     # search_abs = ws == -1
     # use_adj = True
@@ -89,7 +89,7 @@ def init_stnls_k(self,k=100,ps=7,pt=0,ws=21,ws_r=3,wt=0,stride0=4,stride1=1,
     use_self = anchor_self
     nheads = 1
     return stnls.search.NonLocalSearch(ws,wt,ps,k,nheads,
-                                      dist_type="prod",use_adj=use_adj,
+                                      dist_type=dist_type,use_adj=use_adj,
                                       anchor_self=anchor_self,
                                       dilation=dilation,rbwd=rbwd,
                                       nbwd=nbwd,exact=exact,

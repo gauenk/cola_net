@@ -101,6 +101,7 @@ class ContextualAttention_Enhance(nn.Module):
         #                       "dilation":dilation,"rbwd":rbwd,"nbwd":nbwd,
         #                       "exact":exact,"reflect_bounds":reflect_bounds,
         #                       "refine_inds":refine_inds}
+        self.dist_type = search_cfg.dist_type
         self.k_a = search_cfg.k_a
         self.k_s = search_cfg.k_s
         self.search = None
